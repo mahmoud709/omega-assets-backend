@@ -41,3 +41,18 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
       res.status(500).json({ message: 'Server error', error });
    }
 };
+
+export const getEmployeeById = async (req: AuthRequest, res: Response) => {
+   try {
+      const { id } = req.params;
+      const employee = await Employee.findById(id).populate('projectId', 'name location');
+      
+      if (!employee) {
+         return res.status(404).json({ message: 'Employee not found' });
+      }
+
+      res.status(200).json({ message: 'Employee retrieved', data: employee });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};

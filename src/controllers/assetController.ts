@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import Asset from '../models/Asset';
 import CustodyLog from '../models/CustodyLog';
 import { AuthRequest } from '../middleware/auth';
+import Employee from '../models/Employee';
 
 export const createAsset = async (req: AuthRequest, res: Response) => {
    try {
@@ -61,12 +62,27 @@ export const createAsset = async (req: AuthRequest, res: Response) => {
 
 export const getAssets = async (req: AuthRequest, res: Response) => {
    try {
-      const { projectId, categoryId, custodianId, search, condition, assignment, page = 1, limit = 20 } = req.query;
+      const { projectId, categoryId, custodianId, search, condition, assignment, ids, page = 1, limit = 20 } = req.query;
       const query: any = { isActive: true };
+
+      if (ids) {
+         const idsArray = (ids as string).split(',');
+         query._id = { $in: idsArray };
+      }
 
       if (projectId) query.projectId = projectId;
       if (categoryId) query.categoryId = categoryId;
-      if (custodianId) query.currentCustodianId = custodianId;
+      if (custodianId) {
+         const employee = await Employee.findById(custodianId);
+         if (employee) {
+            query.$or = [
+               { currentCustodianId: custodianId },
+               { custodianName: employee.name }
+            ];
+         } else {
+            query.currentCustodianId = custodianId;
+         }
+      }
       if (condition) query.condition = condition;
       
       if (assignment === 'stock') {

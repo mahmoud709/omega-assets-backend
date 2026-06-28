@@ -180,3 +180,66 @@ export const getDashboardStats = async (req: AuthRequest, res: Response) => {
       res.status(500).json({ message: 'Server error', error });
    }
 };
+
+export const getMaintenanceStats = async (req: AuthRequest, res: Response) => {
+   try {
+      const matchAsset: any = {};
+      if (req.user!.role !== 'admin' && req.user!.siteId) {
+         matchAsset['asset.projectId'] = req.user!.siteId;
+      }
+
+      const mostBroken = await MaintenanceTask.aggregate([
+         {
+            $lookup: {
+               from: 'assets',
+               localField: 'assetId',
+               foreignField: '_id',
+               as: 'asset'
+            }
+         },
+         { $unwind: '$asset' },
+         { $match: matchAsset },
+         {
+            $group: {
+               _id: '$assetId',
+               assetName: { $first: '$asset.name' },
+               systemId: { $first: '$asset.systemId' },
+               taskCount: { $sum: 1 },
+               totalCost: { $sum: { $ifNull: ['$cost', 0] } }
+            }
+         },
+         { $sort: { taskCount: -1, totalCost: -1 } },
+         { $limit: 10 }
+      ]);
+
+      const now = new Date();
+      const firstDayOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+      
+      const monthlyCostPipeline: any[] = [
+         { $match: { completedDate: { $gte: firstDayOfMonth }, status: 'completed' } },
+         {
+            $lookup: {
+               from: 'assets',
+               localField: 'assetId',
+               foreignField: '_id',
+               as: 'asset'
+            }
+         },
+         { $unwind: '$asset' },
+         { $match: matchAsset },
+         {
+            $group: {
+               _id: null,
+               totalCost: { $sum: { $ifNull: ['$cost', 0] } }
+            }
+         }
+      ];
+      
+      const costResult = await MaintenanceTask.aggregate(monthlyCostPipeline);
+      const monthlyCost = costResult.length > 0 ? costResult[0].totalCost : 0;
+
+      res.status(200).json({ message: 'Maintenance stats retrieved', data: { mostBroken, monthlyCost } });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};

@@ -5,6 +5,7 @@ import {
    getFinancialValuation,
    exportInventorySheet,
    getDashboardStats,
+   getMaintenanceStats,
 } from '../controllers/reportController';
 
 const router = Router();
@@ -15,5 +16,6 @@ router.get('/inventory/:projectId', getInventoryByProject);
 router.get('/valuation', getFinancialValuation);
 router.get('/export', authorize('admin', 'site_manager'), exportInventorySheet);
 router.get('/dashboard-stats', getDashboardStats);
+router.get('/maintenance-stats', getMaintenanceStats);
 
 export default router;
