@@ -1,5 +1,6 @@
-import { Response } from 'express';
+import { Request, Response } from 'express';
 import MaintenanceTask from '../models/MaintenanceTask';
+import Asset from '../models/Asset';
 import { AuthRequest } from '../middleware/auth';
 
 export const scheduleMaintenance = async (req: AuthRequest, res: Response) => {
@@ -98,6 +99,32 @@ export const getDueMaintenance = async (req: AuthRequest, res: Response) => {
          message: 'Due maintenance tasks retrieved',
          data: tasks,
       });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+export const reportIssue = async (req: Request, res: Response) => {
+   try {
+      const { assetId, description } = req.body;
+
+      let actualAssetId = assetId;
+      if (!/^[0-9a-fA-F]{24}$/.test(assetId)) {
+         const asset = await Asset.findOne({ systemId: assetId });
+         if (!asset) return res.status(404).json({ message: 'Asset not found' });
+         actualAssetId = asset._id.toString();
+      }
+
+      const task = new MaintenanceTask({
+         assetId: actualAssetId,
+         scheduledDate: new Date(),
+         description: `[بلاغ من الـ QR]: ${description}`,
+         status: 'pending',
+      });
+
+      await task.save();
+
+      res.status(201).json({ message: 'Issue reported successfully', task });
    } catch (error) {
       res.status(500).json({ message: 'Server error', error });
    }

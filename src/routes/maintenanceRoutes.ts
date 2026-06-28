@@ -5,9 +5,12 @@ import {
    getMaintenanceTasks,
    updateMaintenanceStatus,
    getDueMaintenance,
+   reportIssue,
 } from '../controllers/maintenanceController';
 
 const router = Router();
+
+router.post('/report', reportIssue);
 
 router.use(authenticate);
 
