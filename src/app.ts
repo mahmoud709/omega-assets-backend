@@ -26,7 +26,7 @@ connectDB();
 // Middleware
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({
-   origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003'],
+   origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'https://omega-assets.vercel.app'],
    credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
