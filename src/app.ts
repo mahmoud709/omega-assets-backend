@@ -48,7 +48,10 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/employees', employeeRoutes);
 
-// Health check
+// Health checks
+app.get('/', (req: express.Request, res: express.Response) => {
+   res.status(200).send('OK');
+});
 app.get('/api/health', (req: express.Request, res: express.Response) => {
    res.status(200).json({ status: 'ok', timestamp: new Date() });
 });
