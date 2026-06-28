@@ -6,7 +6,7 @@ import bcrypt from 'bcrypt';
 
 dotenv.config({ override: true });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 8080;
 
 const createDefaultAdmin = async () => {
    try {
@@ -35,8 +35,8 @@ const createDefaultAdmin = async () => {
    }
 };
 
-const server = app.listen(PORT, async () => {
-   console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode`);
+const server = app.listen(PORT as number, '0.0.0.0', async () => {
+   console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode, bound to 0.0.0.0`);
    await createDefaultAdmin();
 });
 
