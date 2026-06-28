@@ -13,12 +13,15 @@ import { upload } from '../middleware/upload';
 
 const router = Router();
 
+// Public route for QR Code scans
+router.get('/:id', getAssetById);
+
 router.use(authenticate);
 
 router.post('/bulk', authorize('admin', 'site_manager', 'viewer'), bulkCreateAssets);
 router.post('/', authorize('admin', 'site_manager', 'viewer'), upload.single('image'), createAsset);
 router.get('/', getAssets);
-router.get('/:id', getAssetById);
+// router.get('/:id', getAssetById); (moved up)
 router.put('/:id', authorize('admin', 'site_manager', 'viewer'), updateAsset);
 router.delete('/:id', authorize('admin', 'site_manager', 'viewer'), deleteAsset);
 router.post('/:id/assign-custodian', authorize('admin', 'site_manager', 'viewer'), assignCustodian);
