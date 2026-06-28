@@ -126,7 +126,10 @@ export const getAssetById = async (req: AuthRequest, res: Response) => {
    try {
       const { id } = req.params;
 
-      const asset = await Asset.findById(id)
+      const isObjectId = /^[0-9a-fA-F]{24}$/.test(id);
+      const query = isObjectId ? { _id: id } : { systemId: id };
+
+      const asset = await Asset.findOne(query)
          .populate('projectId', 'name location')
          .populate('categoryId', 'name path')
          .populate('currentCustodianId', 'fullName email role')

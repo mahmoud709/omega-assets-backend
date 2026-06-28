@@ -54,15 +54,22 @@ export const transferCustody = async (req: AuthRequest, res: Response) => {
 
 export const getCustodyHistory = async (req: AuthRequest, res: Response) => {
    try {
-      const { assetId, page = 1, limit = 20 } = req.query;
+      const { page = 1, limit = 20 } = req.query;
+      const { assetId } = req.params;
 
       const pageNum = Math.max(1, parseInt(page as string) || 1);
       const limitNum = Math.min(100, parseInt(limit as string) || 20);
       const skip = (pageNum - 1) * limitNum;
 
       const filter: Record<string, any> = {};
+      
       if (assetId) {
-         filter.assetId = assetId;
+         let actualAssetId = assetId;
+         if (!/^[0-9a-fA-F]{24}$/.test(assetId)) {
+            const asset = await Asset.findOne({ systemId: assetId });
+            if (asset) actualAssetId = asset._id.toString();
+         }
+         filter.assetId = actualAssetId;
       }
 
       const logs = await CustodyLog.find(filter)
