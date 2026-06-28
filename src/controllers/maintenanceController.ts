@@ -78,6 +78,9 @@ export const updateMaintenanceStatus = async (req: AuthRequest, res: Response) =
          
          // Update asset condition to 'good' once maintenance is completed
          await Asset.findByIdAndUpdate(task.assetId, { condition: 'good' });
+      } else if (status === 'in_progress' || status === 'pending') {
+         // Ensure asset condition is 'needs_repair' when under maintenance
+         await Asset.findByIdAndUpdate(task.assetId, { condition: 'needs_repair' });
       }
 
       await task.save();
