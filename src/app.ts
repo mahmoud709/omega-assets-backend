@@ -26,7 +26,13 @@ connectDB();
 // Middleware
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({
-   origin: ['http://localhost:3000', 'http://localhost:3001', 'http://localhost:3002', 'http://localhost:3003', 'https://omega-assets.vercel.app'],
+   origin: function (origin, callback) {
+      if (!origin || origin.includes('localhost') || origin.includes('vercel.app')) {
+         callback(null, true);
+      } else {
+         callback(new Error('Not allowed by CORS'));
+      }
+   },
    credentials: true
 }));
 app.use(express.json({ limit: '50mb' }));
