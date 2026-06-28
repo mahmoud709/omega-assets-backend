@@ -75,6 +75,9 @@ export const updateMaintenanceStatus = async (req: AuthRequest, res: Response) =
       if (status === 'completed') {
          task.completedDate = new Date();
          task.performedBy = req.user!._id;
+         
+         // Update asset condition to 'good' once maintenance is completed
+         await Asset.findByIdAndUpdate(task.assetId, { condition: 'good' });
       }
 
       await task.save();
@@ -123,6 +126,9 @@ export const reportIssue = async (req: Request, res: Response) => {
       });
 
       await task.save();
+
+      // Update asset condition to 'needs_repair'
+      await Asset.findByIdAndUpdate(actualAssetId, { condition: 'needs_repair' });
 
       res.status(201).json({ message: 'Issue reported successfully', task });
    } catch (error) {
