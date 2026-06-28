@@ -25,18 +25,42 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
 
 export const getEmployees = async (req: AuthRequest, res: Response) => {
    try {
-      const { projectId } = req.query;
+      const { projectId, search, page = 1, limit = 20 } = req.query;
       const query: any = { isActive: true };
       
       if (projectId) query.projectId = projectId;
+      if (search) {
+         query.name = { $regex: search, $options: 'i' };
+      }
       
       // Role-based filtering
       if (req.user!.role !== 'admin' && req.user!.siteId) {
          query.projectId = req.user!.siteId;
       }
 
-      const employees = await Employee.find(query).populate('projectId', 'name').sort({ name: 1 });
-      res.status(200).json({ message: 'Employees retrieved', data: employees });
+      const pageNum = parseInt(page as string, 10) || 1;
+      const limitNum = parseInt(limit as string, 10) || 20;
+      const skip = (pageNum - 1) * limitNum;
+
+      const [employees, total] = await Promise.all([
+         Employee.find(query)
+            .populate('projectId', 'name')
+            .sort({ name: 1 })
+            .skip(skip)
+            .limit(limitNum),
+         Employee.countDocuments(query)
+      ]);
+
+      res.status(200).json({ 
+         message: 'Employees retrieved', 
+         data: employees,
+         pagination: {
+            total,
+            page: pageNum,
+            pages: Math.ceil(total / limitNum),
+            limit: limitNum
+         }
+      });
    } catch (error) {
       res.status(500).json({ message: 'Server error', error });
    }
