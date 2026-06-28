@@ -4,7 +4,7 @@ import { initializeScheduler } from './services/scheduler';
 import User from './models/User';
 import bcrypt from 'bcrypt';
 
-dotenv.config({ override: true });
+dotenv.config();
 
 const PORT = process.env.PORT || 8080;
 
