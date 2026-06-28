@@ -1,0 +1,104 @@
+import { Response } from 'express';
+import MaintenanceTask from '../models/MaintenanceTask';
+import { AuthRequest } from '../middleware/auth';
+
+export const scheduleMaintenance = async (req: AuthRequest, res: Response) => {
+   try {
+      const { assetId, scheduledDate, description, cost } = req.body;
+
+      const task = new MaintenanceTask({
+         assetId,
+         scheduledDate,
+         description,
+         cost,
+         status: 'pending',
+      });
+
+      await task.save();
+
+      res.status(201).json({ message: 'Maintenance task scheduled', task });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+export const getMaintenanceTasks = async (req: AuthRequest, res: Response) => {
+   try {
+      const { assetId, status, startDate, endDate, page = 1, limit = 20 } = req.query;
+      const query: any = {};
+
+      if (assetId) query.assetId = assetId;
+      if (status) query.status = status;
+
+      if (startDate || endDate) {
+         query.scheduledDate = {};
+         if (startDate) query.scheduledDate.$gte = new Date(startDate as string);
+         if (endDate) query.scheduledDate.$lte = new Date(endDate as string);
+      }
+
+      const pageNum = Math.max(1, parseInt(page as string) || 1);
+      const limitNum = Math.min(100, parseInt(limit as string) || 20);
+      const skip = (pageNum - 1) * limitNum;
+
+      const tasks = await MaintenanceTask.find(query)
+         .populate('assetId', 'name systemId')
+         .populate('performedBy', 'fullName email')
+         .skip(skip)
+         .limit(limitNum)
+         .sort({ scheduledDate: 1 });
+
+      const total = await MaintenanceTask.countDocuments(query);
+
+      res.status(200).json({
+         message: 'Maintenance tasks retrieved',
+         data: tasks,
+         pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
+      });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+export const updateMaintenanceStatus = async (req: AuthRequest, res: Response) => {
+   try {
+      const { id } = req.params;
+      const { status, cost } = req.body;
+
+      const task = await MaintenanceTask.findById(id);
+      if (!task) {
+         return res.status(404).json({ message: 'Maintenance task not found' });
+      }
+
+      if (status) task.status = status;
+      if (cost) task.cost = cost;
+      if (status === 'completed') {
+         task.completedDate = new Date();
+         task.performedBy = req.user!._id;
+      }
+
+      await task.save();
+
+      res.status(200).json({ message: 'Maintenance status updated', task });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+export const getDueMaintenance = async (req: AuthRequest, res: Response) => {
+   try {
+      const now = new Date();
+      const tasks = await MaintenanceTask.find({
+         scheduledDate: { $lte: now },
+         status: 'pending',
+      })
+         .populate('assetId', 'name systemId projectId')
+         .sort({ scheduledDate: 1 });
+
+      res.status(200).json({
+         message: 'Due maintenance tasks retrieved',
+         data: tasks,
+      });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
