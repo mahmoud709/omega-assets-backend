@@ -6,6 +6,8 @@ export interface IEmployee extends Document {
    department?: string;
    phone?: string;
    isActive: boolean;
+   isOffice?: boolean;
+   members?: mongoose.Types.ObjectId[];
    createdAt: Date;
    updatedAt: Date;
 }
@@ -17,6 +19,8 @@ const EmployeeSchema = new Schema<IEmployee>(
       department: { type: String },
       phone: { type: String },
       isActive: { type: Boolean, default: true },
+      isOffice: { type: Boolean, default: false },
+      members: [{ type: Schema.Types.ObjectId, ref: 'Employee' }],
    },
    { timestamps: true }
 );

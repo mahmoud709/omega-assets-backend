@@ -14,6 +14,8 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
          name: emp.name,
          department: emp.department,
          projectId,
+         isOffice: emp.isOffice || false,
+         members: emp.members || [],
       }));
 
       const created = await Employee.insertMany(docs);
@@ -45,6 +47,7 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
       const [employees, total] = await Promise.all([
          Employee.find(query)
             .populate('projectId', 'name')
+            .populate('members', 'name')
             .sort({ name: 1 })
             .skip(skip)
             .limit(limitNum),
@@ -69,13 +72,36 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
 export const getEmployeeById = async (req: AuthRequest, res: Response) => {
    try {
       const { id } = req.params;
-      const employee = await Employee.findById(id).populate('projectId', 'name location');
+      const employee = await Employee.findById(id)
+         .populate('projectId', 'name location')
+         .populate('members', 'name');
       
       if (!employee) {
          return res.status(404).json({ message: 'Employee not found' });
       }
 
       res.status(200).json({ message: 'Employee retrieved', data: employee });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+export const updateEmployee = async (req: AuthRequest, res: Response) => {
+   try {
+      const { id } = req.params;
+      const { name, department, projectId, isOffice, members } = req.body;
+      
+      const employee = await Employee.findByIdAndUpdate(
+         id,
+         { name, department, projectId, isOffice, members },
+         { new: true, runValidators: true }
+      ).populate('projectId', 'name').populate('members', 'name');
+      
+      if (!employee) {
+         return res.status(404).json({ message: 'Employee not found' });
+      }
+
+      res.status(200).json({ message: 'Employee updated', data: employee });
    } catch (error) {
       res.status(500).json({ message: 'Server error', error });
    }

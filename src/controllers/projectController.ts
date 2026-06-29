@@ -3,6 +3,7 @@ import Project from '../models/Project';
 import { AuthRequest } from '../middleware/auth';
 
 import Category from '../models/Category';
+import Employee from '../models/Employee';
 
 export const createProject = async (req: AuthRequest, res: Response) => {
    try {
@@ -31,7 +32,15 @@ export const createProject = async (req: AuthRequest, res: Response) => {
       
       await Category.insertMany(categoriesToInsert);
 
-      res.status(201).json({ message: 'Project created with default categories', project });
+      // Automatically create a "Warehouse" (المخزن) employee for this project
+      const defaultWarehouse = new Employee({
+         name: 'المخزن',
+         department: 'مخزن المشروع',
+         projectId: project._id,
+      });
+      await defaultWarehouse.save();
+
+      res.status(201).json({ message: 'Project created with default categories and warehouse', project });
    } catch (error) {
       res.status(500).json({ message: 'Server error', error });
    }
