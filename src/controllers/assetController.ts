@@ -167,7 +167,7 @@ export const updateAsset = async (req: AuthRequest, res: Response) => {
       const { id } = req.params;
       const { 
          name, condition, specifications, maintenanceSchedule, currentCustodianId,
-         serialNumber, purchaseDate, purchaseCost, vendor, notes
+         serialNumber, purchaseDate, purchaseCost, vendor, notes, custodianName
       } = req.body;
 
       const asset = await Asset.findById(id);
@@ -184,6 +184,20 @@ export const updateAsset = async (req: AuthRequest, res: Response) => {
       if (purchaseCost !== undefined) asset.purchaseCost = purchaseCost;
       if (vendor !== undefined) asset.vendor = vendor;
       if (notes !== undefined) asset.notes = notes;
+
+      if (custodianName !== undefined && asset.custodianName !== custodianName) {
+         const prevCustodianName = asset.custodianName;
+         asset.custodianName = custodianName;
+         asset.custodyStartDate = new Date();
+
+         const log = new CustodyLog({
+            assetId: asset._id,
+            fromUserName: prevCustodianName || 'المخزن',
+            toUserName: custodianName || 'المخزن',
+            notes: 'تم تغيير العهدة من خلال التعديل المباشر',
+         });
+         await log.save();
+      }
 
       if (currentCustodianId && asset.currentCustodianId?.toString() !== currentCustodianId) {
          const prevCustodian = asset.currentCustodianId;
