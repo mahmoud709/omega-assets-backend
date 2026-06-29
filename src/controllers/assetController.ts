@@ -188,6 +188,7 @@ export const updateAsset = async (req: AuthRequest, res: Response) => {
       if (custodianName !== undefined && asset.custodianName !== custodianName) {
          const prevCustodianName = asset.custodianName;
          asset.custodianName = custodianName;
+         asset.currentCustodianId = undefined; // Clear the old User ref so it prioritizes Employee name
          asset.custodyStartDate = new Date();
 
          const log = new CustodyLog({
