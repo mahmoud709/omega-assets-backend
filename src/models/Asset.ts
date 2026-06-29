@@ -9,7 +9,7 @@ export interface IAsset extends Document {
    purchaseDate?: Date;
    purchaseCost?: number;
    vendor?: string;
-   condition: 'excellent' | 'good' | 'needs_repair' | 'scrapped';
+   condition: 'excellent' | 'good' | 'bad' | 'needs_repair' | 'scrapped';
    notes?: string;
    specifications?: Map<string, any>;
    qrCodeData: string;      // URL or content
@@ -43,7 +43,7 @@ const AssetSchema = new Schema<IAsset>(
       vendor: { type: String },
       condition: {
          type: String,
-         enum: ['excellent', 'good', 'needs_repair', 'scrapped'],
+         enum: ['excellent', 'good', 'bad', 'needs_repair', 'scrapped'],
          default: 'good',
       },
       notes: { type: String },
