@@ -6,23 +6,25 @@ import bcrypt from 'bcrypt';
 
 dotenv.config();
 
-const PORT = process.env.PORT || 8080;
+const PORT = process.env.PORT || 5000;
 
 const createDefaultAdmin = async () => {
    try {
+      const salt = await bcrypt.genSalt(10);
+      const passwordHash = await bcrypt.hash('admin123', salt);
+      
       let adminUser = await User.findOne({ email: 'admin@admin.com' });
       
       if (adminUser) {
+         adminUser.passwordHash = passwordHash;
          if (adminUser.role !== 'admin') {
             adminUser.role = 'admin';
-            await adminUser.save();
-            console.log('User admin@admin.com upgraded to admin');
          }
+         await adminUser.save();
+         console.log('User admin@admin.com password reset to admin123');
          return;
       }
 
-      const salt = await bcrypt.genSalt(10);
-      const passwordHash = await bcrypt.hash('admin123', salt);
       await User.create({
          email: 'admin@admin.com',
          passwordHash,

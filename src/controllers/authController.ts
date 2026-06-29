@@ -24,7 +24,7 @@ export const register = async (req: Request, res: Response) => {
       });
       await user.save();
 
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, { expiresIn: '7d' });
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, { expiresIn: '100y' });
 
       res.status(201).json({ message: 'User registered successfully', token, user: { id: user._id, email: user.email, fullName: user.fullName, role: user.role } });
    } catch (error) {
@@ -51,7 +51,7 @@ export const login = async (req: Request, res: Response) => {
 
       console.log(`Login success: ${email}`);
 
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, { expiresIn: '7d' });
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, { expiresIn: '100y' });
 
       res.status(200).json({
          token,
