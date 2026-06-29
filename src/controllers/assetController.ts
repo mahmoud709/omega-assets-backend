@@ -165,18 +165,25 @@ export const getAssetById = async (req: AuthRequest, res: Response) => {
 export const updateAsset = async (req: AuthRequest, res: Response) => {
    try {
       const { id } = req.params;
-      const { name, condition, specifications, maintenanceSchedule, currentCustodianId, ...rest } =
-         req.body;
+      const { 
+         name, condition, specifications, maintenanceSchedule, currentCustodianId,
+         serialNumber, purchaseDate, purchaseCost, vendor, notes
+      } = req.body;
 
       const asset = await Asset.findById(id);
       if (!asset) {
          return res.status(404).json({ message: 'Asset not found' });
       }
 
-      if (name) asset.name = name;
-      if (condition) asset.condition = condition;
-      if (specifications) asset.specifications = specifications;
-      if (maintenanceSchedule) asset.maintenanceSchedule = maintenanceSchedule;
+      if (name !== undefined) asset.name = name;
+      if (condition !== undefined) asset.condition = condition;
+      if (specifications !== undefined) asset.specifications = specifications;
+      if (maintenanceSchedule !== undefined) asset.maintenanceSchedule = maintenanceSchedule;
+      if (serialNumber !== undefined) asset.serialNumber = serialNumber;
+      if (purchaseDate !== undefined) asset.purchaseDate = purchaseDate;
+      if (purchaseCost !== undefined) asset.purchaseCost = purchaseCost;
+      if (vendor !== undefined) asset.vendor = vendor;
+      if (notes !== undefined) asset.notes = notes;
 
       if (currentCustodianId && asset.currentCustodianId?.toString() !== currentCustodianId) {
          const prevCustodian = asset.currentCustodianId;
