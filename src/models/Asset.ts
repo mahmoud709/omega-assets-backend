@@ -10,6 +10,7 @@ export interface IAsset extends Document {
    purchaseCost?: number;
    vendor?: string;
    condition: 'excellent' | 'good' | 'needs_repair' | 'scrapped';
+   notes?: string;
    specifications?: Map<string, any>;
    qrCodeData: string;      // URL or content
    qrCodeImage?: string;    // path to image
@@ -45,6 +46,7 @@ const AssetSchema = new Schema<IAsset>(
          enum: ['excellent', 'good', 'needs_repair', 'scrapped'],
          default: 'good',
       },
+      notes: { type: String },
       specifications: { type: Map, of: Schema.Types.Mixed },
       qrCodeData: { type: String, required: true },
       qrCodeImage: { type: String },

@@ -16,9 +16,9 @@ export const createAsset = async (req: AuthRequest, res: Response) => {
          purchaseCost,
          vendor,
          condition,
-         specifications,
          currentCustodianId,
          maintenanceSchedule,
+         notes,
       } = req.body;
 
       const count = await Asset.countDocuments();
@@ -42,6 +42,7 @@ export const createAsset = async (req: AuthRequest, res: Response) => {
          purchaseCost,
          vendor,
          condition: condition || 'good',
+         notes,
          specifications: specifications || {},
          qrCodeData: qrData,
          qrCodeImage: undefined, // Opting not to save images on server
@@ -289,6 +290,7 @@ export const bulkCreateAssets = async (req: AuthRequest, res: Response) => {
             purchaseCost: assetData.purchaseCost,
             vendor: assetData.vendor,
             condition: assetData.condition || 'good',
+            notes: assetData.notes,
             specifications: assetData.specifications || {},
             qrCodeData: qrData,
             qrCodeImage: undefined, // Optional in schema
