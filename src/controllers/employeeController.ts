@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import Employee from '../models/Employee';
 import { AuthRequest } from '../middleware/auth';
+import Asset from '../models/Asset';
+import CustodyLog from '../models/CustodyLog';
 
 export const createEmployee = async (req: AuthRequest, res: Response) => {
    try {
@@ -106,3 +108,113 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       res.status(500).json({ message: 'Server error', error });
    }
 };
+
+export const deleteEmployee = async (req: AuthRequest, res: Response) => {
+   try {
+      const { id } = req.params;
+      const { reassignments } = req.body;
+      
+      const employee = await Employee.findById(id);
+      if (!employee) {
+         return res.status(404).json({ message: 'Employee not found' });
+      }
+
+      // Soft delete the employee
+      employee.isActive = false;
+      await employee.save();
+
+      // Find all assets currently assigned to this employee
+      const assets = await Asset.find({
+         $or: [
+            { currentCustodianId: employee._id },
+            { custodianName: employee.name }
+         ]
+      });
+
+      if (assets.length > 0) {
+         // Create a map of reassignments: assetId -> toEmployeeId
+         const reassignmentMap = new Map<string, string>();
+         if (Array.isArray(reassignments)) {
+            for (const r of reassignments) {
+               if (r.assetId && r.toEmployeeId) {
+                  reassignmentMap.set(r.assetId.toString(), r.toEmployeeId.toString());
+               }
+            }
+         }
+
+         // Process each asset
+         for (const asset of assets) {
+            const targetEmployeeId = reassignmentMap.get(asset._id.toString());
+            
+            if (targetEmployeeId && targetEmployeeId !== 'stock') {
+               // Reassign to another employee
+               const targetEmployee = await Employee.findById(targetEmployeeId);
+               if (targetEmployee) {
+                  const log = new CustodyLog({
+                     assetId: asset._id,
+                     fromProjectId: asset.projectId,
+                     toProjectId: targetEmployee.projectId || asset.projectId,
+                     fromUserId: asset.currentCustodianId,
+                     fromUserName: asset.custodianName,
+                     toUserId: targetEmployee._id,
+                     toUserName: targetEmployee.name,
+                     transferredAt: new Date(),
+                     notes: `نقل عهدة تلقائي بسبب حذف المسؤول السابق (${employee.name})`,
+                  });
+                  await log.save();
+
+                  asset.currentCustodianId = targetEmployee._id as any;
+                  asset.custodianName = targetEmployee.name;
+                  asset.custodyStartDate = new Date();
+                  if (targetEmployee.projectId) {
+                     asset.projectId = targetEmployee.projectId;
+                  }
+                  await asset.save();
+               } else {
+                  // Fallback to stock if employee not found
+                  const log = new CustodyLog({
+                     assetId: asset._id,
+                     fromProjectId: asset.projectId,
+                     toProjectId: asset.projectId,
+                     fromUserId: asset.currentCustodianId,
+                     fromUserName: asset.custodianName,
+                     toUserName: 'المخزن',
+                     transferredAt: new Date(),
+                     notes: `إرجاع تلقائي للمخزن بسبب حذف الموظف/الجهة: ${employee.name}`,
+                  });
+                  await log.save();
+
+                  asset.currentCustodianId = undefined;
+                  asset.custodianName = undefined;
+                  asset.custodyStartDate = undefined;
+                  await asset.save();
+               }
+            } else {
+               // Return to stock
+               const log = new CustodyLog({
+                  assetId: asset._id,
+                  fromProjectId: asset.projectId,
+                  toProjectId: asset.projectId,
+                  fromUserId: asset.currentCustodianId,
+                  fromUserName: asset.custodianName,
+                  toUserName: 'المخزن',
+                  transferredAt: new Date(),
+                  notes: `إرجاع تلقائي للمخزن بسبب حذف الموظف/الجهة: ${employee.name}`,
+               });
+               await log.save();
+
+               asset.currentCustodianId = undefined;
+               asset.custodianName = undefined;
+               asset.custodyStartDate = undefined;
+               await asset.save();
+            }
+         }
+      }
+
+      res.status(200).json({ message: 'Employee deleted and assets reassigned successfully' });
+   } catch (error) {
+      console.error('Delete employee error:', error);
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+

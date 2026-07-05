@@ -3,13 +3,14 @@ import Asset from '../models/Asset';
 import CustodyLog from '../models/CustodyLog';
 import { AuthRequest } from '../middleware/auth';
 import mongoose from 'mongoose';
+import Employee from '../models/Employee';
 
 export const transferCustody = async (req: AuthRequest, res: Response) => {
    const session = await mongoose.startSession();
    session.startTransaction();
 
    try {
-      const { assetId, toUserName, toProjectId, notes } = req.body;
+      const { assetId, toUserName, toProjectId, notes, transferQuantity } = req.body;
 
       const asset = await Asset.findById(assetId).session(session);
       if (!asset) {
@@ -21,19 +22,85 @@ export const transferCustody = async (req: AuthRequest, res: Response) => {
       const previousCustodianName = asset.custodianName;
       const previousProjectId = asset.projectId;
 
+      const requestedQty = parseInt(transferQuantity, 10);
+
+      // Find the Employee (or Office) ID by name and project
+      let targetCustodianId: mongoose.Types.ObjectId | undefined = undefined;
+      if (toUserName && toUserName !== 'المخزن') {
+         const emp = await Employee.findOne({ name: toUserName, projectId: toProjectId || previousProjectId });
+         if (emp) {
+            targetCustodianId = emp._id as mongoose.Types.ObjectId;
+         }
+      }
+
+      if (requestedQty > 0 && requestedQty < (asset.quantity || 1)) {
+         // Split transfer!
+         const originalQty = asset.quantity || 1;
+         
+         // Reduce the original asset quantity
+         asset.quantity = originalQty - requestedQty;
+         await asset.save({ session });
+
+         // Create a new split asset
+         const count = await Asset.countDocuments().session(session);
+         const systemId = `OMEGA-${new Date().getFullYear()}-${String(count + 1).padStart(4, '0')}`;
+         const qrData = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/assets/${systemId}`;
+
+         const newAsset = new Asset({
+            systemId,
+            projectId: toProjectId || previousProjectId,
+            categoryId: asset.categoryId,
+            name: asset.name,
+            quantity: requestedQty,
+            serialNumber: asset.serialNumber ? `${asset.serialNumber}-split` : undefined,
+            condition: asset.condition || 'good',
+            notes: asset.notes,
+            specifications: asset.specifications || {},
+            qrCodeData: qrData,
+            currentCustodianId: targetCustodianId,
+            custodianName: toUserName,
+            custodyStartDate: new Date(),
+            isActive: true,
+            createdBy: req.user!._id,
+         });
+
+         await newAsset.save({ session });
+
+         // Save custody log for the split
+         const log = new CustodyLog({
+            assetId: newAsset._id,
+            fromProjectId: previousProjectId,
+            toProjectId: toProjectId || previousProjectId,
+            fromUserId: previousCustodianId,
+            fromUserName: previousCustodianName || (previousCustodianId ? undefined : 'المخزن'),
+            toUserId: targetCustodianId,
+            toUserName,
+            transferredAt: new Date(),
+            notes: notes || `تجزئة وتسليم عدد ${requestedQty} من الأصل الأصلي (${asset.systemId})`,
+         });
+         await log.save({ session });
+
+         await session.commitTransaction();
+         session.endSession();
+
+         return res.status(200).json({ message: 'Custody split and transferred successfully', log, newAsset });
+      }
+
+      // Normal full custody transfer
       const log = new CustodyLog({
          assetId,
          fromProjectId: previousProjectId,
          toProjectId: toProjectId || previousProjectId,
          fromUserId: previousCustodianId,
          fromUserName: previousCustodianName || (previousCustodianId ? undefined : 'المخزن'),
+         toUserId: targetCustodianId,
          toUserName,
          transferredAt: new Date(),
          notes,
       });
       await log.save({ session });
 
-      asset.currentCustodianId = undefined;
+      asset.currentCustodianId = targetCustodianId;
       asset.custodianName = toUserName;
       if (toProjectId) {
          asset.projectId = toProjectId;
