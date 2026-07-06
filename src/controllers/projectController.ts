@@ -1,6 +1,7 @@
 import { Response } from 'express';
 import Project from '../models/Project';
 import { AuthRequest } from '../middleware/auth';
+import User from '../models/User';
 
 import Category from '../models/Category';
 import Employee from '../models/Employee';
@@ -80,9 +81,28 @@ export const getProjects = async (req: AuthRequest, res: Response) => {
 
       const total = await Project.countDocuments(query);
 
+      // Find all users assigned to these projects
+      const projectIds = projects.map(p => p._id);
+      const assignedUsers = await User.find({
+         siteId: { $in: projectIds }
+      }).select('fullName email role siteId');
+
+      const data = projects.map(project => {
+         const projectObj = project.toObject();
+         const projectTeam = assignedUsers.filter(u => u.siteId?.toString() === project._id.toString());
+         return {
+            ...projectObj,
+            team: projectTeam.map(u => ({ 
+               fullName: u.fullName, 
+               email: u.email,
+               role: u.role 
+            })),
+         };
+      });
+
       res.status(200).json({
          message: 'Projects retrieved',
-         data: projects,
+         data,
          pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
       });
    } catch (error) {
@@ -100,7 +120,21 @@ export const getProjectById = async (req: AuthRequest, res: Response) => {
          return res.status(404).json({ message: 'Project not found' });
       }
 
-      res.status(200).json({ message: 'Project retrieved', project });
+      const assignedUsers = await User.find({
+         siteId: project._id
+      }).select('fullName email role');
+
+      res.status(200).json({ 
+         message: 'Project retrieved', 
+         project: {
+            ...project.toObject(),
+            team: assignedUsers.map(u => ({
+               fullName: u.fullName,
+               email: u.email,
+               role: u.role
+            }))
+         } 
+      });
    } catch (error) {
       res.status(500).json({ message: 'Server error', error });
    }

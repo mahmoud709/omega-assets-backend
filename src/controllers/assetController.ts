@@ -19,6 +19,8 @@ export const createAsset = async (req: AuthRequest, res: Response) => {
          currentCustodianId,
          maintenanceSchedule,
          notes,
+         specifications,
+         image,
       } = req.body;
 
       const count = await Asset.countDocuments();
@@ -46,6 +48,7 @@ export const createAsset = async (req: AuthRequest, res: Response) => {
          specifications: specifications || {},
          qrCodeData: qrData,
          qrCodeImage: undefined, // Opting not to save images on server
+         image,
          currentCustodianId,
          custodyStartDate: currentCustodianId ? new Date() : undefined,
          maintenanceSchedule,
@@ -167,7 +170,7 @@ export const updateAsset = async (req: AuthRequest, res: Response) => {
       const { id } = req.params;
       const { 
          name, condition, specifications, maintenanceSchedule, currentCustodianId,
-         serialNumber, purchaseDate, purchaseCost, vendor, notes, custodianName
+         serialNumber, purchaseDate, purchaseCost, vendor, notes, custodianName, image
       } = req.body;
 
       const asset = await Asset.findById(id);
@@ -184,6 +187,7 @@ export const updateAsset = async (req: AuthRequest, res: Response) => {
       if (purchaseCost !== undefined) asset.purchaseCost = purchaseCost;
       if (vendor !== undefined) asset.vendor = vendor;
       if (notes !== undefined) asset.notes = notes;
+      if (image !== undefined) asset.image = image;
 
       if (custodianName !== undefined && asset.custodianName !== custodianName) {
          const prevCustodianName = asset.custodianName;
@@ -316,6 +320,7 @@ export const bulkCreateAssets = async (req: AuthRequest, res: Response) => {
             specifications: assetData.specifications || {},
             qrCodeData: qrData,
             qrCodeImage: undefined, // Optional in schema
+            image: assetData.image,
             custodianName: assetData.custodianName,
             isActive: true,
             createdBy: req.user!._id,

@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import { initializeScheduler } from './services/scheduler';
 import User from './models/User';
 import bcrypt from 'bcrypt';
+import connectDB from './config/database';
 
 dotenv.config();
 
@@ -13,41 +14,63 @@ const createDefaultAdmin = async () => {
       const salt = await bcrypt.genSalt(10);
       const passwordHash = await bcrypt.hash('admin123', salt);
       
-      let adminUser = await User.findOne({ email: 'admin@admin.com' });
-      
-      if (adminUser) {
-         adminUser.passwordHash = passwordHash;
-         if (adminUser.role !== 'admin') {
-            adminUser.role = 'admin';
+      // 1. Fetch and log all users in the database so you can find the email
+      const allUsers = await User.find({});
+      console.log('=== DATABASE USERS ===');
+      allUsers.forEach(u => {
+         console.log(`- Email: ${u.email} | Name: ${u.fullName} | Role: ${u.role}`);
+      });
+      console.log('======================');
+
+      // 2. Reset password for all admin users to 'admin123'
+      const adminUsers = allUsers.filter(u => u.role === 'admin');
+      if (adminUsers.length > 0) {
+         for (const admin of adminUsers) {
+            admin.passwordHash = passwordHash;
+            await admin.save();
+            console.log(`Admin user "${admin.email}" password has been reset to: admin123`);
          }
-         await adminUser.save();
-         console.log('User admin@admin.com password reset to admin123');
-         return;
       }
 
-      await User.create({
-         email: 'admin@admin.com',
-         passwordHash,
-         fullName: 'مدير النظام',
-         role: 'admin'
-      });
-      console.log('Default admin user created: admin@admin.com / admin123');
+      // 3. Ensure at least the default admin@admin.com exists
+      const hasDefaultAdmin = allUsers.some(u => u.email === 'admin@admin.com');
+      if (!hasDefaultAdmin) {
+         await User.create({
+            email: 'admin@admin.com',
+            passwordHash,
+            fullName: 'مدير النظام',
+            role: 'admin'
+         });
+         console.log('Default admin user created: admin@admin.com / admin123');
+      }
    } catch (error) {
       console.error('Error creating default admin:', error);
    }
 };
 
-const server = app.listen(PORT as number, '0.0.0.0', async () => {
-   console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode, bound to 0.0.0.0`);
-   await createDefaultAdmin();
-});
+const startServer = async () => {
+   try {
+      // Connect to Database first
+      await connectDB();
 
-initializeScheduler();
+      const server = app.listen(PORT as number, '0.0.0.0', async () => {
+         console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode, bound to 0.0.0.0`);
+         await createDefaultAdmin();
+      });
 
-process.on('SIGTERM', () => {
-   console.log('SIGTERM received, shutting down gracefully');
-   server.close(() => {
-      console.log('Server closed');
-      process.exit(0);
-   });
-});
+      initializeScheduler();
+
+      process.on('SIGTERM', () => {
+         console.log('SIGTERM received, shutting down gracefully');
+         server.close(() => {
+            console.log('Server closed');
+            process.exit(0);
+         });
+      });
+   } catch (error) {
+      console.error('Failed to start server:', error);
+      process.exit(1);
+   }
+};
+
+startServer();

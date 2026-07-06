@@ -3,7 +3,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import dotenv from 'dotenv';
-import connectDB from './config/database';
 import authRoutes from './routes/authRoutes';
 import projectRoutes from './routes/projectRoutes';
 import categoryRoutes from './routes/categoryRoutes';
@@ -19,9 +18,6 @@ import { notFoundHandler } from './middleware/notFound';
 dotenv.config();
 
 const app: Application = express();
-
-// Connect to DB
-connectDB();
 
 // Middleware
 app.use(helmet({ crossOriginResourcePolicy: false }));

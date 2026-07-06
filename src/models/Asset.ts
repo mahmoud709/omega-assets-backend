@@ -14,6 +14,7 @@ export interface IAsset extends Document {
    specifications?: Map<string, any>;
    qrCodeData: string;      // URL or content
    qrCodeImage?: string;    // path to image
+   image?: string;          // Compressed image (base64 string)
    quantity: number;        // For bulk items like scaffolding
    currentCustodianId?: mongoose.Types.ObjectId;
    custodianName?: string;
@@ -50,6 +51,7 @@ const AssetSchema = new Schema<IAsset>(
       specifications: { type: Map, of: Schema.Types.Mixed },
       qrCodeData: { type: String, required: true },
       qrCodeImage: { type: String },
+      image: { type: String },
       currentCustodianId: { type: Schema.Types.ObjectId, ref: 'User' },
       custodianName: { type: String },
       custodyStartDate: { type: Date },
