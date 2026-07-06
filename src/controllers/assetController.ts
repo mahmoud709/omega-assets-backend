@@ -79,6 +79,12 @@ export const getAssets = async (req: AuthRequest, res: Response) => {
       if (custodianId) {
          const employee = await Employee.findById(custodianId);
          if (employee) {
+            // Self-healing: Associate any assets matching this employee's name that lack currentCustodianId
+            await Asset.updateMany(
+               { custodianName: employee.name, currentCustodianId: null },
+               { $set: { currentCustodianId: employee._id } }
+            );
+
             query.$or = [
                { currentCustodianId: custodianId },
                { custodianName: employee.name }
@@ -293,10 +299,26 @@ export const bulkCreateAssets = async (req: AuthRequest, res: Response) => {
       const currentYear = new Date().getFullYear();
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
 
+      // Resolve employee names to employee IDs
+      const employeeNames = assets
+         .map((a: any) => a.custodianName)
+         .filter((name: any): name is string => typeof name === 'string' && name.trim() !== '');
+
+      const matchedEmployees = await Employee.find({ name: { $in: employeeNames }, isActive: true });
+      const employeeMap = new Map<string, string>();
+      matchedEmployees.forEach(emp => {
+         employeeMap.set(emp.name.trim().toLowerCase(), emp._id.toString());
+      });
+
       for (const assetData of assets) {
          // Prevent assigning to a different project if restricted
          if (userSiteId && assetData.projectId !== userSiteId.toString()) {
             continue;
+         }
+
+         let currentCustodianId: string | undefined = undefined;
+         if (assetData.custodianName) {
+            currentCustodianId = employeeMap.get(assetData.custodianName.trim().toLowerCase());
          }
 
          count++;
@@ -322,6 +344,8 @@ export const bulkCreateAssets = async (req: AuthRequest, res: Response) => {
             qrCodeImage: undefined, // Optional in schema
             image: assetData.image,
             custodianName: assetData.custodianName,
+            currentCustodianId: currentCustodianId || undefined,
+            custodyStartDate: currentCustodianId ? new Date() : undefined,
             isActive: true,
             createdBy: req.user!._id,
          }));

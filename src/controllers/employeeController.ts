@@ -82,6 +82,12 @@ export const getEmployeeById = async (req: AuthRequest, res: Response) => {
          return res.status(404).json({ message: 'Employee not found' });
       }
 
+      // Self-healing: Associate any assets matching this employee's name that lack currentCustodianId
+      await Asset.updateMany(
+         { custodianName: employee.name, currentCustodianId: null },
+         { $set: { currentCustodianId: employee._id } }
+      );
+
       res.status(200).json({ message: 'Employee retrieved', data: employee });
    } catch (error) {
       res.status(500).json({ message: 'Server error', error });
@@ -93,6 +99,12 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       const { id } = req.params;
       const { name, department, projectId, isOffice, members } = req.body;
       
+      const oldEmployee = await Employee.findById(id);
+      if (!oldEmployee) {
+         return res.status(404).json({ message: 'Employee not found' });
+      }
+      const oldName = oldEmployee.name;
+
       const employee = await Employee.findByIdAndUpdate(
          id,
          { name, department, projectId, isOffice, members },
@@ -101,6 +113,24 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       
       if (!employee) {
          return res.status(404).json({ message: 'Employee not found' });
+      }
+
+      // Sync name changes to all assigned assets
+      if (name && name !== oldName) {
+         await Asset.updateMany(
+            {
+               $or: [
+                  { currentCustodianId: employee._id },
+                  { custodianName: oldName }
+               ]
+            },
+            {
+               $set: {
+                  currentCustodianId: employee._id,
+                  custodianName: name
+               }
+            }
+         );
       }
 
       res.status(200).json({ message: 'Employee updated', data: employee });
