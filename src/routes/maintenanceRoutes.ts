@@ -6,6 +6,7 @@ import {
    updateMaintenanceStatus,
    getDueMaintenance,
    reportIssue,
+   deleteMaintenanceTask,
 } from '../controllers/maintenanceController';
 
 const router = Router();
@@ -18,5 +19,6 @@ router.post('/', authorize('admin', 'site_manager'), scheduleMaintenance);
 router.get('/', getMaintenanceTasks);
 router.get('/due', getDueMaintenance);
 router.put('/:id', authorize('admin', 'site_manager'), updateMaintenanceStatus);
+router.delete('/:id', authorize('admin', 'site_manager'), deleteMaintenanceTask);
 
 export default router;

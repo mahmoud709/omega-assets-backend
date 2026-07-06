@@ -138,3 +138,29 @@ export const reportIssue = async (req: Request, res: Response) => {
       res.status(500).json({ message: 'Server error', error });
    }
 };
+
+export const deleteMaintenanceTask = async (req: AuthRequest, res: Response) => {
+   try {
+      const { id } = req.params;
+      const task = await MaintenanceTask.findById(id);
+      if (!task) {
+         return res.status(404).json({ message: 'Maintenance task not found' });
+      }
+
+      await MaintenanceTask.findByIdAndDelete(id);
+
+      // Check if there are other active maintenance tasks for the same asset
+      const otherActiveTasks = await MaintenanceTask.findOne({
+         assetId: task.assetId,
+         status: { $in: ['pending', 'in_progress'] }
+      });
+      if (!otherActiveTasks) {
+         // Revert asset condition to 'good' if there are no other active maintenance tasks
+         await Asset.findByIdAndUpdate(task.assetId, { condition: 'good' });
+      }
+
+      res.status(200).json({ message: 'Maintenance task deleted successfully' });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
