@@ -1,5 +1,4 @@
 import QRCode from 'qrcode';
-import { v4 as uuidv4 } from 'uuid';
 import fs from 'fs';
 import path from 'path';
 
@@ -12,7 +11,8 @@ if (!fs.existsSync(QR_STORAGE_PATH)) {
 
 export const generateQR = async (data: string): Promise<string> => {
    try {
-      const fileName = `${uuidv4()}.png`;
+      const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1e9);
+      const fileName = `${uniqueSuffix}.png`;
       const filePath = path.join(QR_STORAGE_PATH, fileName);
       await QRCode.toFile(filePath, data, {
          width: 300,
