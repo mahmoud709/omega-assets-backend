@@ -134,3 +134,16 @@ export const validateMongoId = (paramName: string = 'id') => [
       .withMessage(`Invalid ${paramName}`),
    handleValidationErrors,
 ];
+
+export const validateRegister = [
+   body('email').trim().isEmail().withMessage('Valid email is required'),
+   body('password').notEmpty().withMessage('Password is required').isLength({ min: 6 }).withMessage('Password must be at least 6 characters'),
+   body('fullName').trim().notEmpty().withMessage('Full name is required'),
+   handleValidationErrors,
+];
+
+export const validateLogin = [
+   body('email').trim().isEmail().withMessage('Valid email is required'),
+   body('password').notEmpty().withMessage('Password is required'),
+   handleValidationErrors,
+];

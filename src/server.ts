@@ -22,15 +22,6 @@ const createDefaultAdmin = async () => {
       });
       console.log('======================');
 
-      // 2. Reset password for all admin users to 'admin123'
-      const adminUsers = allUsers.filter(u => u.role === 'admin');
-      if (adminUsers.length > 0) {
-         for (const admin of adminUsers) {
-            admin.passwordHash = passwordHash;
-            await admin.save();
-            console.log(`Admin user "${admin.email}" password has been reset to: admin123`);
-         }
-      }
 
       // 3. Ensure at least the default admin@admin.com exists
       const hasDefaultAdmin = allUsers.some(u => u.email === 'admin@admin.com');

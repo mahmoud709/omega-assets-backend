@@ -5,6 +5,7 @@ import {
    getCustodyHistory,
    getCurrentCustodian,
    returnCustody,
+   withdrawCustody,
 } from '../controllers/custodyController';
 
 const router = Router();
@@ -18,5 +19,6 @@ router.post('/transfer', authorize('admin', 'site_manager'), transferCustody);
 // router.get('/history/:assetId', getCustodyHistory); (moved up)
 router.get('/current/:assetId', getCurrentCustodian);
 router.post('/return/:assetId', authorize('admin', 'site_manager'), returnCustody);
+router.post('/withdraw/:assetId', authorize('admin', 'site_manager'), withdrawCustody);
 
 export default router;

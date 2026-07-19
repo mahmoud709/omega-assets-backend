@@ -24,7 +24,7 @@ export const register = async (req: Request, res: Response) => {
       });
       await user.save();
 
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, { expiresIn: '100y' });
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, { expiresIn: '7d' });
 
       res.status(201).json({ message: 'User registered successfully', token, user: { id: user._id, email: user.email, fullName: user.fullName, role: user.role } });
    } catch (error) {
@@ -51,7 +51,7 @@ export const login = async (req: Request, res: Response) => {
 
       console.log(`Login success: ${email}`);
 
-      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, { expiresIn: '100y' });
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET as string, { expiresIn: '7d' });
 
       res.status(200).json({
          token,
@@ -67,32 +67,4 @@ export const login = async (req: Request, res: Response) => {
       res.status(500).json({ message: 'Server error', error });
    }
 };
-
-export const setupAdmin = async (req: Request, res: Response) => {
-   try {
-      let adminUser = await User.findOne({ email: 'admin@admin.com' });
-      
-      if (adminUser) {
-         // If user exists but is not admin, update them to admin
-         if (adminUser.role !== 'admin') {
-            adminUser.role = 'admin';
-            await adminUser.save();
-            return res.status(200).json({ message: 'User existed and was upgraded to Admin', email: adminUser.email });
-         }
-         return res.status(200).json({ message: 'Admin already exists', email: adminUser.email });
-      }
-
-      const passwordHash = await bcrypt.hash('admin123', 10);
-      adminUser = new User({
-         email: 'admin@admin.com',
-         passwordHash,
-         fullName: 'مدير النظام',
-         role: 'admin',
-      });
-      await adminUser.save();
-
-      res.status(201).json({ message: 'Default admin created', email: 'admin@admin.com', password: 'admin123' });
-   } catch (error) {
-      res.status(500).json({ message: 'Server error', error });
-   }
-};
+

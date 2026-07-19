@@ -210,3 +210,69 @@ export const returnCustody = async (req: AuthRequest, res: Response) => {
       res.status(500).json({ message: 'Server error', error });
    }
 };
+
+export const withdrawCustody = async (req: AuthRequest, res: Response) => {
+   const session = await mongoose.startSession();
+   session.startTransaction();
+
+   try {
+      const { assetId } = req.params;
+      const { quantity, reason } = req.body;
+
+      const asset = await Asset.findById(assetId).session(session);
+      if (!asset) {
+         await session.abortTransaction();
+         session.endSession();
+         return res.status(404).json({ message: 'Asset not found' });
+      }
+
+      const requestedQty = parseInt(quantity, 10);
+      if (isNaN(requestedQty) || requestedQty <= 0) {
+         await session.abortTransaction();
+         session.endSession();
+         return res.status(400).json({ message: 'الكمية يجب أن تكون أكبر من الصفر' });
+      }
+
+      const currentQty = asset.quantity || 1;
+      if (requestedQty > currentQty) {
+         await session.abortTransaction();
+         session.endSession();
+         return res.status(400).json({ message: 'الكمية المراد سحبها أكبر من الكمية المتاحة بالأصل' });
+      }
+
+      if (!reason || typeof reason !== 'string' || reason.trim() === '') {
+         await session.abortTransaction();
+         session.endSession();
+         return res.status(400).json({ message: 'سبب السحب إجباري' });
+      }
+
+      // Reduce quantity
+      asset.quantity = currentQty - requestedQty;
+      if (asset.quantity === 0) {
+         asset.isActive = false;
+      }
+      await asset.save({ session });
+
+      // Save log
+      const log = new CustodyLog({
+         assetId: asset._id,
+         fromProjectId: asset.projectId,
+         fromUserId: asset.currentCustodianId,
+         fromUserName: asset.custodianName || (asset.currentCustodianId ? undefined : 'المخزن'),
+         toUserId: req.user!._id,
+         toUserName: 'سحب واستهلاك',
+         transferredAt: new Date(),
+         notes: `سحب عدد ${requestedQty}. السبب: ${reason.trim()}`,
+      });
+      await log.save({ session });
+
+      await session.commitTransaction();
+      session.endSession();
+
+      res.status(200).json({ message: 'Asset quantity withdrawn successfully', asset, log });
+   } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
