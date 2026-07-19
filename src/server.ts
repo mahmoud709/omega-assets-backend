@@ -41,12 +41,20 @@ const createDefaultAdmin = async () => {
 
 const startServer = async () => {
    try {
-      // Connect to Database first
-      await connectDB();
-
       const server = app.listen(PORT as number, '0.0.0.0', async () => {
          console.log(`Server running on port ${PORT} in ${process.env.NODE_ENV} mode, bound to 0.0.0.0`);
+         
+         // Connect to Database AFTER opening the port so Airoapp health checks pass instantly!
+         await connectDB();
+         
          await createDefaultAdmin();
+      });
+
+      // Handle unhandled promise rejections
+      process.on('unhandledRejection', (err: Error) => {
+         console.log(`Error: ${err.message}`);
+         // Close server & exit process
+         server.close(() => process.exit(1));
       });
 
       initializeScheduler();
