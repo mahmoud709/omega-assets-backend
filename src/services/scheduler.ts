@@ -1,3 +1,4 @@
+// @ts-ignore
 import cron from 'node-cron';
 import MaintenanceTask from '../models/MaintenanceTask';
 import Asset from '../models/Asset';
