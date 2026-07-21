@@ -74,8 +74,22 @@ export const getAssets = async (req: AuthRequest, res: Response) => {
          query._id = { $in: idsArray };
       }
 
-      if (projectId) query.projectId = projectId;
-      if (categoryId) query.categoryId = categoryId;
+      if (projectId) {
+         const pIds = (projectId as string).split(',');
+         if (pIds.length > 1) {
+            query.projectId = { $in: pIds };
+         } else {
+            query.projectId = projectId;
+         }
+      }
+      if (categoryId) {
+         const cIds = (categoryId as string).split(',');
+         if (cIds.length > 1) {
+            query.categoryId = { $in: cIds };
+         } else {
+            query.categoryId = categoryId;
+         }
+      }
       if (custodianId) {
          const employee = await Employee.findById(custodianId);
          if (employee) {
@@ -137,11 +151,13 @@ export const getAssets = async (req: AuthRequest, res: Response) => {
          .sort({ createdAt: -1 });
 
       const total = await Asset.countDocuments(query);
+      const allMatchingAssets = await Asset.find(query).select('quantity');
+      const totalQuantity = allMatchingAssets.reduce((sum, asset) => sum + (asset.quantity || 1), 0);
 
       res.status(200).json({
          message: 'Assets retrieved',
          data: assets,
-         pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum) },
+         pagination: { page: pageNum, limit: limitNum, total, pages: Math.ceil(total / limitNum), totalQuantity },
       });
    } catch (error) {
       res.status(500).json({ message: 'Server error', error });
@@ -176,7 +192,7 @@ export const updateAsset = async (req: AuthRequest, res: Response) => {
       const { id } = req.params;
       const { 
          name, condition, specifications, maintenanceSchedule, currentCustodianId,
-         serialNumber, purchaseDate, purchaseCost, vendor, notes, custodianName, image
+         serialNumber, purchaseDate, purchaseCost, vendor, notes, custodianName, image, quantity, categoryId
       } = req.body;
 
       const asset = await Asset.findById(id);
@@ -194,6 +210,8 @@ export const updateAsset = async (req: AuthRequest, res: Response) => {
       if (vendor !== undefined) asset.vendor = vendor;
       if (notes !== undefined) asset.notes = notes;
       if (image !== undefined) asset.image = image;
+      if (quantity !== undefined) asset.quantity = quantity;
+      if (categoryId !== undefined) asset.categoryId = categoryId;
 
       if (custodianName !== undefined && asset.custodianName !== custodianName) {
          const prevCustodianName = asset.custodianName;
