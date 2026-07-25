@@ -6,6 +6,11 @@ import { AuthRequest } from '../middleware/auth';
 export const createCategory = async (req: AuthRequest, res: Response) => {
    try {
       const { projectId, name, parentId } = req.body;
+      console.log({
+         projectId,
+         name,
+         parentId,
+      });
 
       // Prevent duplicate categories within the same project
       const existingCategory = await Category.findOne({ projectId, name });
