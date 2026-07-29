@@ -3,6 +3,7 @@ import Asset from '../models/Asset';
 import CustodyLog from '../models/CustodyLog';
 import { AuthRequest } from '../middleware/auth';
 import Employee from '../models/Employee';
+import mongoose from 'mongoose';
 
 export const createAsset = async (req: AuthRequest, res: Response) => {
    try {
@@ -64,6 +65,25 @@ export const createAsset = async (req: AuthRequest, res: Response) => {
    }
 };
 
+const buildArabicRegexPattern = (searchTerm: string) => {
+   if (!searchTerm || typeof searchTerm !== 'string') return null;
+   let term = searchTerm.trim();
+   if (!term) return null;
+
+   const arabicNumbers = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+   term = term.replace(/[٠-٩]/g, (w) => String(arabicNumbers.indexOf(w)));
+
+   let pattern = term.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+   pattern = pattern.replace(/[\u064B-\u0652]/g, '');
+
+   pattern = pattern
+      .replace(/[أإآا]/g, '[أإآا]')
+      .replace(/[ةه]/g, '[ةه]')
+      .replace(/[ىي]/g, '[ىي]');
+
+   return new RegExp(pattern, 'i');
+};
+
 export const getAssets = async (req: AuthRequest, res: Response) => {
    try {
       const { projectId, categoryId, custodianId, search, condition, assignment, ids, page = 1, limit = 20 } = req.query;
@@ -120,11 +140,26 @@ export const getAssets = async (req: AuthRequest, res: Response) => {
             { custodianName: { $nin: [null, ''] } }
          ];
       }
+
       if (search) {
-         query.$or = [
-            { systemId: { $regex: search, $options: 'i' } },
-            { name: { $regex: search, $options: 'i' } },
-         ];
+         const searchRegex = buildArabicRegexPattern(search as string);
+         if (searchRegex) {
+            const searchOr = [
+               { systemId: { $regex: searchRegex } },
+               { name: { $regex: searchRegex } },
+               { serialNumber: { $regex: searchRegex } },
+               { custodianName: { $regex: searchRegex } },
+               { notes: { $regex: searchRegex } },
+               { vendor: { $regex: searchRegex } },
+            ];
+
+            if (query.$or) {
+               query.$and = query.$and || [];
+               query.$and.push({ $or: searchOr });
+            } else {
+               query.$or = searchOr;
+            }
+         }
       }
 
       // Role-based filtering: strict project isolation
@@ -148,7 +183,7 @@ export const getAssets = async (req: AuthRequest, res: Response) => {
          .populate('createdBy', 'fullName')
          .skip(skip)
          .limit(limitNum)
-         .sort({ createdAt: -1 });
+         .sort({ sortOrder: 1, createdAt: -1 });
 
       const total = await Asset.countDocuments(query);
       const allMatchingAssets = await Asset.find(query).select('quantity');
@@ -382,3 +417,125 @@ export const bulkCreateAssets = async (req: AuthRequest, res: Response) => {
       res.status(500).json({ message: 'Server error', error });
    }
 };
+
+export const bulkDeleteAssets = async (req: AuthRequest, res: Response) => {
+   try {
+      const { ids } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+         return res.status(400).json({ message: 'لم يتم تحديد عناصر للحذف' });
+      }
+
+      const query: any = { _id: { $in: ids } };
+
+      if (req.user!.role !== 'admin' && req.user!.siteId) {
+         query.projectId = req.user!.siteId;
+      }
+
+      const result = await Asset.updateMany(query, { $set: { isActive: false } });
+
+      res.status(200).json({
+         message: `تم حذف ${result.modifiedCount} عنصر بنجاح`,
+         deletedCount: result.modifiedCount,
+      });
+   } catch (error) {
+      console.error('Bulk delete error:', error);
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+export const findDuplicateAssets = async (req: AuthRequest, res: Response) => {
+   try {
+      const matchStage: any = { isActive: true };
+
+      if (req.user!.role !== 'admin' && req.user!.siteId) {
+         matchStage.projectId = req.user!.siteId;
+      }
+
+      const duplicates = await Asset.aggregate([
+         { $match: matchStage },
+         {
+            $project: {
+               name: 1,
+               cleanName: { $toLower: { $trim: { input: "$name" } } },
+               systemId: 1,
+               serialNumber: 1,
+               quantity: 1,
+               projectId: 1,
+               custodianName: 1,
+               currentCustodianId: 1,
+               condition: 1,
+               createdAt: 1,
+            }
+         },
+         {
+            $group: {
+               _id: "$cleanName",
+               originalName: { $first: "$name" },
+               count: { $sum: 1 },
+               totalQuantity: { $sum: "$quantity" },
+               assets: {
+                  $push: {
+                     _id: "$_id",
+                     name: "$name",
+                     systemId: "$systemId",
+                     serialNumber: "$serialNumber",
+                     quantity: "$quantity",
+                     projectId: "$projectId",
+                     custodianName: "$custodianName",
+                     currentCustodianId: "$currentCustodianId",
+                     condition: "$condition",
+                     createdAt: "$createdAt",
+                  }
+               }
+            }
+         },
+         { $match: { count: { $gt: 1 } } },
+         { $sort: { count: -1 } }
+      ]);
+
+      await Asset.populate(duplicates, [
+         { path: 'assets.projectId', select: 'name' },
+         { path: 'assets.currentCustodianId', select: 'fullName' }
+      ]);
+
+      res.status(200).json({
+         message: 'تم فحص المتكررات بنجاح',
+         totalDuplicateGroups: duplicates.length,
+         data: duplicates,
+      });
+   } catch (error) {
+      console.error('Duplicate search error:', error);
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+export const reorderAssets = async (req: AuthRequest, res: Response) => {
+   try {
+      const { items } = req.body;
+
+      if (!items || !Array.isArray(items)) {
+         return res.status(400).json({ message: 'items must be an array' });
+      }
+
+      const validIds: string[] = [];
+      for (const item of items) {
+         const assetId = String(item?.id || item?._id || '');
+         if (!assetId || !mongoose.Types.ObjectId.isValid(assetId)) continue;
+         validIds.push(assetId);
+         const idx = items.indexOf(item);
+         await Asset.findByIdAndUpdate(assetId, { $set: { sortOrder: idx + 1 } });
+      }
+
+      return res.status(200).json({
+         message: 'تم حفظ الترتيب بنجاح',
+         count: validIds.length,
+      });
+   } catch (error: any) {
+      console.error('[reorderAssets] ERROR:', error?.message, error?.stack);
+      return res.status(500).json({
+         message: error?.message || 'Unknown error in reorderAssets',
+         detail: String(error),
+      });
+   } 
+};
+

@@ -6,6 +6,7 @@ import {
    getCurrentCustodian,
    returnCustody,
    withdrawCustody,
+   bulkTransferCustody,
 } from '../controllers/custodyController';
 
 const router = Router();
@@ -16,9 +17,10 @@ router.get('/history/:assetId', getCustodyHistory);
 router.use(authenticate);
 
 router.post('/transfer', authorize('admin', 'site_manager'), transferCustody);
-// router.get('/history/:assetId', getCustodyHistory); (moved up)
+router.post('/bulk-transfer', authorize('admin', 'site_manager', 'viewer'), bulkTransferCustody);
 router.get('/current/:assetId', getCurrentCustodian);
 router.post('/return/:assetId', authorize('admin', 'site_manager'), returnCustody);
 router.post('/withdraw/:assetId', authorize('admin', 'site_manager'), withdrawCustody);
 
 export default router;
+

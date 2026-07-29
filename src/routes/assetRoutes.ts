@@ -8,18 +8,26 @@ import {
    deleteAsset,
    assignCustodian,
    bulkCreateAssets,
+   findDuplicateAssets,
+   reorderAssets,
 } from '../controllers/assetController';
 import { upload } from '../middleware/upload';
 
 const router = Router();
 
+// Reorder endpoint (declared first to guarantee exact route matching)
+router.post('/reorder', authenticate, authorize('admin', 'site_manager', 'viewer'), reorderAssets);
+router.put('/reorder', authenticate, authorize('admin', 'site_manager', 'viewer'), reorderAssets);
+
 // Public route for QR Code scans
 router.get('/:id', getAssetById);
 
 router.use(authenticate);
-
+router.get('/duplicates', authorize('admin', 'site_manager', 'viewer'), findDuplicateAssets);
 router.post('/bulk', authorize('admin', 'site_manager', 'viewer'), bulkCreateAssets);
+
 router.post('/', authorize('admin', 'site_manager', 'viewer'), upload.single('image'), createAsset);
+
 router.get('/', getAssets);
 // router.get('/:id', getAssetById); (moved up)
 router.put('/:id', authorize('admin', 'site_manager', 'viewer'), updateAsset);

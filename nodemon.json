@@ -2,5 +2,5 @@
   "watch": ["src"],
   "ext": "ts,json",
   "ignore": ["src/**/*.spec.ts", "uploads/*", "node_modules/*"],
-  "exec": "node server.js"
+  "exec": "node -r ts-node/register/transpile-only src/server.ts"
 }

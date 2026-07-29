@@ -26,6 +26,7 @@ export interface IAsset extends Document {
       notes?: string;
    };
    isActive: boolean;
+   sortOrder?: number;
    createdBy: mongoose.Types.ObjectId;
    createdAt: Date;
    updatedAt: Date;
@@ -62,6 +63,7 @@ const AssetSchema = new Schema<IAsset>(
          notes: { type: String },
       },
       isActive: { type: Boolean, default: true },
+      sortOrder: { type: Number, default: 0 },
       createdBy: { type: Schema.Types.ObjectId, ref: 'User', required: true },
    },
    { timestamps: true }
@@ -70,5 +72,6 @@ const AssetSchema = new Schema<IAsset>(
 // Indexes
 AssetSchema.index({ projectId: 1, systemId: 1 });
 AssetSchema.index({ currentCustodianId: 1 });
+AssetSchema.index({ sortOrder: 1 });
 
 export default mongoose.model<IAsset>('Asset', AssetSchema);

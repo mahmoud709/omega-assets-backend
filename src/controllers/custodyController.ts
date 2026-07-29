@@ -130,7 +130,7 @@ export const getCustodyHistory = async (req: AuthRequest, res: Response) => {
 
       const filter: Record<string, any> = {};
       
-      if (assetId) {
+      if (assetId && assetId !== 'all') {
          let actualAssetId = assetId;
          if (!/^[0-9a-fA-F]{24}$/.test(assetId)) {
             const asset = await Asset.findOne({ systemId: assetId });
@@ -276,3 +276,85 @@ export const withdrawCustody = async (req: AuthRequest, res: Response) => {
       res.status(500).json({ message: 'Server error', error });
    }
 };
+
+export const bulkTransferCustody = async (req: AuthRequest, res: Response) => {
+   const session = await mongoose.startSession();
+   session.startTransaction();
+
+   try {
+      const { assetIds, toProjectId, toUserName, toUserId, notes } = req.body;
+
+      if (!Array.isArray(assetIds) || assetIds.length === 0) {
+         await session.abortTransaction();
+         session.endSession();
+         return res.status(400).json({ message: 'لم يتم تحديد أصول للنقل' });
+      }
+
+      let targetCustodianId: mongoose.Types.ObjectId | undefined = undefined;
+      if (toUserId && mongoose.Types.ObjectId.isValid(toUserId)) {
+         targetCustodianId = new mongoose.Types.ObjectId(toUserId);
+      } else if (toUserName && toUserName !== 'المخزن') {
+         const emp = await Employee.findOne({ name: toUserName });
+         if (emp) {
+            targetCustodianId = emp._id as mongoose.Types.ObjectId;
+         }
+      }
+
+      const query: any = { _id: { $in: assetIds }, isActive: true };
+      if (req.user!.role !== 'admin' && req.user!.siteId) {
+         query.projectId = req.user!.siteId;
+      }
+
+      const assets = await Asset.find(query).session(session);
+
+      const logsToInsert: any[] = [];
+      let updatedCount = 0;
+
+      for (const asset of assets) {
+         const previousCustodianId = asset.currentCustodianId;
+         const previousCustodianName = asset.custodianName;
+         const previousProjectId = asset.projectId;
+
+         logsToInsert.push({
+            assetId: asset._id,
+            fromProjectId: previousProjectId,
+            toProjectId: toProjectId || previousProjectId,
+            fromUserId: previousCustodianId,
+            fromUserName: previousCustodianName || (previousCustodianId ? undefined : 'المخزن'),
+            toUserId: targetCustodianId,
+            toUserName: toUserName !== undefined ? (toUserName || 'المخزن') : (previousCustodianName || 'المخزن'),
+            transferredAt: new Date(),
+            notes: notes || `نقل جماعي لعدد ${assetIds.length} أصول`,
+         });
+
+         if (toProjectId) {
+            asset.projectId = toProjectId;
+         }
+         if (toUserName !== undefined) {
+            asset.custodianName = toUserName;
+            asset.currentCustodianId = targetCustodianId;
+            asset.custodyStartDate = toUserName ? new Date() : undefined;
+         }
+
+         await asset.save({ session });
+         updatedCount++;
+      }
+
+      if (logsToInsert.length > 0) {
+         await CustodyLog.insertMany(logsToInsert, { session });
+      }
+
+      await session.commitTransaction();
+      session.endSession();
+
+      res.status(200).json({
+         message: `تم نقل ${updatedCount} عنصر جماعياً بنجاح`,
+         transferredCount: updatedCount,
+      });
+   } catch (error) {
+      await session.abortTransaction();
+      session.endSession();
+      console.error('Bulk transfer error:', error);
+      res.status(500).json({ message: 'Server error', error });
+   }
+};

@@ -14,6 +14,8 @@ import userRoutes from './routes/userRoutes';
 import employeeRoutes from './routes/employeeRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFound';
+import { authenticate, authorize } from './middleware/auth';
+import { reorderAssets } from './controllers/assetController';
 
 dotenv.config();
 
@@ -23,8 +25,8 @@ const app: Application = express();
 app.use(helmet({ crossOriginResourcePolicy: false }));
 app.use(cors({
    origin: [
-      'http://localhost:3000', 
-      'http://localhost:3001', 
+      'http://localhost:3000',
+      'http://localhost:3001',
       'https://omega-assets.vercel.app'
    ],
    credentials: true,
@@ -34,9 +36,11 @@ app.use(cors({
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
 app.use(morgan('dev'));
-
-// Static files for uploads
 app.use('/uploads', express.static('uploads'));
+
+// Direct reorder route registered at app level before assetRoutes router
+app.post('/api/assets/reorder', authenticate, authorize('admin', 'site_manager', 'viewer'), reorderAssets as any);
+app.put('/api/assets/reorder', authenticate, authorize('admin', 'site_manager', 'viewer'), reorderAssets as any);
 
 // Routes
 app.use('/api/auth', authRoutes);
@@ -50,12 +54,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/employees', employeeRoutes);
 
 // Health checks
-app.get('/', (req: express.Request, res: express.Response) => {
-   res.status(200).send('OK');
-});
-app.get('/api/health', (req: express.Request, res: express.Response) => {
-   res.status(200).json({ status: 'ok', timestamp: new Date() });
-});
+app.get('/', (req, res) => { res.status(200).send('OK'); });
+app.get('/api/health', (req, res) => { res.status(200).json({ status: 'ok', timestamp: new Date() }); });
 
 // Error handling
 app.use(notFoundHandler);
