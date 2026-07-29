@@ -86,6 +86,15 @@ const buildArabicRegexPattern = (searchTerm: string) => {
 
 export const getAssets = async (req: AuthRequest, res: Response) => {
    try {
+      // ONE-TIME CLEANUP: Remove "حصر دفتري" from notes
+      const assetsWithNotes = await Asset.find({ notes: { $regex: 'حصر دفتري' } });
+      for (const a of assetsWithNotes) {
+         if (a.notes) {
+            a.notes = a.notes.replace(/حصر دفتري/g, '').trim();
+            await a.save();
+         }
+      }
+
       const { projectId, categoryId, custodianId, search, condition, assignment, ids, page = 1, limit = 20 } = req.query;
       const query: any = { isActive: true };
 
