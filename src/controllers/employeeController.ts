@@ -12,13 +12,20 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
          return res.status(400).json({ message: 'No employees provided' });
       }
 
-      const docs = employees.map(emp => ({
-         name: emp.name,
-         department: emp.department,
-         projectId,
-         isOffice: emp.isOffice || false,
-         members: emp.members || [],
-      }));
+      const docs = employees.map(emp => {
+         const primaryProject = emp.projectId || projectId;
+         const rawProjectIds = Array.isArray(emp.projectIds) ? emp.projectIds : (primaryProject ? [primaryProject] : []);
+         const uniqueProjectIds = Array.from(new Set([primaryProject, ...rawProjectIds].filter(Boolean)));
+
+         return {
+            name: emp.name,
+            department: emp.department,
+            projectId: primaryProject,
+            projectIds: uniqueProjectIds,
+            isOffice: emp.isOffice || false,
+            members: emp.members || [],
+         };
+      });
 
       const created = await Employee.insertMany(docs);
       res.status(201).json({ message: `${created.length} employees created`, created });
@@ -32,14 +39,42 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
       const { projectId, search, page = 1, limit = 20 } = req.query;
       const query: any = { isActive: true };
       
-      if (projectId) query.projectId = projectId;
-      if (search) {
-         query.name = { $regex: search, $options: 'i' };
+      const filterProjectId = req.user!.role !== 'admin' && req.user!.siteId 
+         ? req.user!.siteId 
+         : projectId;
+
+      if (filterProjectId) {
+         const custodianIdsInProject = await Asset.distinct('currentCustodianId', { 
+            projectId: filterProjectId, 
+            currentCustodianId: { $ne: null },
+            isActive: true 
+         });
+
+         const custodianNamesInProject = await Asset.distinct('custodianName', {
+            projectId: filterProjectId,
+            custodianName: { $nin: [null, '', 'المخزن'] },
+            isActive: true
+         });
+
+         query.$or = [
+            { projectId: filterProjectId },
+            { projectIds: filterProjectId },
+            { _id: { $in: custodianIdsInProject } },
+            { name: { $in: custodianNamesInProject } }
+         ];
       }
-      
-      // Role-based filtering
-      if (req.user!.role !== 'admin' && req.user!.siteId) {
-         query.projectId = req.user!.siteId;
+
+      if (search) {
+         const searchFilter = { name: { $regex: search, $options: 'i' } };
+         if (query.$or) {
+            query.$and = [
+               { $or: query.$or },
+               searchFilter
+            ];
+            delete query.$or;
+         } else {
+            query.name = searchFilter.name;
+         }
       }
 
       const pageNum = parseInt(page as string, 10) || 1;
@@ -48,7 +83,8 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
 
       const [employees, total] = await Promise.all([
          Employee.find(query)
-            .populate('projectId', 'name')
+            .populate('projectId', 'name location')
+            .populate('projectIds', 'name location')
             .populate('members', 'name')
             .sort({ name: 1 })
             .skip(skip)
@@ -76,6 +112,7 @@ export const getEmployeeById = async (req: AuthRequest, res: Response) => {
       const { id } = req.params;
       const employee = await Employee.findById(id)
          .populate('projectId', 'name location')
+         .populate('projectIds', 'name location')
          .populate('members', 'name');
       
       if (!employee) {
@@ -97,7 +134,7 @@ export const getEmployeeById = async (req: AuthRequest, res: Response) => {
 export const updateEmployee = async (req: AuthRequest, res: Response) => {
    try {
       const { id } = req.params;
-      const { name, department, projectId, isOffice, members } = req.body;
+      const { name, department, projectId, projectIds, isOffice, members } = req.body;
       
       const oldEmployee = await Employee.findById(id);
       if (!oldEmployee) {
@@ -105,11 +142,24 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       }
       const oldName = oldEmployee.name;
 
+      const primaryProject = projectId || (Array.isArray(projectIds) && projectIds.length > 0 ? projectIds[0] : oldEmployee.projectId);
+      const rawProjectIds = Array.isArray(projectIds) && projectIds.length > 0 
+         ? projectIds 
+         : (primaryProject ? [primaryProject] : (oldEmployee.projectIds || []));
+      const uniqueProjectIds = Array.from(new Set([primaryProject, ...rawProjectIds].filter(Boolean)));
+
       const employee = await Employee.findByIdAndUpdate(
          id,
-         { name, department, projectId, isOffice, members },
+         { 
+            name, 
+            department, 
+            projectId: primaryProject, 
+            projectIds: uniqueProjectIds,
+            isOffice, 
+            members 
+         },
          { new: true, runValidators: true }
-      ).populate('projectId', 'name').populate('members', 'name');
+      ).populate('projectId', 'name location').populate('projectIds', 'name location').populate('members', 'name');
       
       if (!employee) {
          return res.status(404).json({ message: 'Employee not found' });

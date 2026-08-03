@@ -39,7 +39,7 @@ export const createAsset = async (req: AuthRequest, res: Response) => {
          projectId: finalProjectId,
          categoryId,
          name,
-         quantity: quantity || 1,
+         quantity: quantity !== undefined && quantity !== null && quantity !== '' ? Number(quantity) : 1,
          serialNumber,
          purchaseDate,
          purchaseCost,
@@ -254,7 +254,7 @@ export const updateAsset = async (req: AuthRequest, res: Response) => {
       if (vendor !== undefined) asset.vendor = vendor;
       if (notes !== undefined) asset.notes = notes;
       if (image !== undefined) asset.image = image;
-      if (quantity !== undefined) asset.quantity = quantity;
+      if (quantity !== undefined) asset.quantity = Number(quantity);
       if (categoryId !== undefined) asset.categoryId = categoryId;
 
       if (custodianName !== undefined && asset.custodianName !== custodianName) {
@@ -394,7 +394,7 @@ export const bulkCreateAssets = async (req: AuthRequest, res: Response) => {
             projectId: assetData.projectId,
             categoryId: assetData.categoryId,
             name: assetData.name,
-            quantity: assetData.quantity || 1,
+            quantity: assetData.quantity !== undefined && assetData.quantity !== null && assetData.quantity !== '' ? Number(assetData.quantity) : 1,
             serialNumber: assetData.serialNumber,
             purchaseDate: assetData.purchaseDate,
             purchaseCost: assetData.purchaseCost,

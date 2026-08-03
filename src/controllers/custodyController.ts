@@ -22,14 +22,34 @@ export const transferCustody = async (req: AuthRequest, res: Response) => {
       const previousCustodianName = asset.custodianName;
       const previousProjectId = asset.projectId;
 
-      const requestedQty = parseInt(transferQuantity, 10);
+      const requestedQty = parseFloat(transferQuantity);
 
       // Find the Employee (or Office) ID by name and project
       let targetCustodianId: mongoose.Types.ObjectId | undefined = undefined;
       if (toUserName && toUserName !== 'المخزن') {
-         const emp = await Employee.findOne({ name: toUserName, projectId: toProjectId || previousProjectId });
+         let emp = await Employee.findOne({
+            name: toUserName,
+            $or: [
+               { projectId: toProjectId || previousProjectId },
+               { projectIds: toProjectId || previousProjectId }
+            ]
+         }).session(session);
+
+         if (!emp) {
+            emp = await Employee.findOne({ name: toUserName }).session(session);
+         }
+
          if (emp) {
             targetCustodianId = emp._id as mongoose.Types.ObjectId;
+            if (toProjectId) {
+               if (!emp.projectIds || !Array.isArray(emp.projectIds)) {
+                  emp.projectIds = emp.projectId ? [emp.projectId] : [];
+               }
+               if (!emp.projectIds.some((pid: any) => pid.toString() === toProjectId.toString())) {
+                  emp.projectIds.push(toProjectId);
+                  await emp.save({ session });
+               }
+            }
          }
       }
 
@@ -38,7 +58,7 @@ export const transferCustody = async (req: AuthRequest, res: Response) => {
          const originalQty = asset.quantity || 1;
          
          // Reduce the original asset quantity
-         asset.quantity = originalQty - requestedQty;
+         asset.quantity = Math.round((originalQty - requestedQty) * 10000) / 10000;
          await asset.save({ session });
 
          // Create a new split asset
@@ -226,7 +246,7 @@ export const withdrawCustody = async (req: AuthRequest, res: Response) => {
          return res.status(404).json({ message: 'Asset not found' });
       }
 
-      const requestedQty = parseInt(quantity, 10);
+      const requestedQty = parseFloat(quantity);
       if (isNaN(requestedQty) || requestedQty <= 0) {
          await session.abortTransaction();
          session.endSession();
@@ -247,8 +267,9 @@ export const withdrawCustody = async (req: AuthRequest, res: Response) => {
       }
 
       // Reduce quantity
-      asset.quantity = currentQty - requestedQty;
-      if (asset.quantity === 0) {
+      asset.quantity = Math.round((currentQty - requestedQty) * 10000) / 10000;
+      if (asset.quantity <= 0) {
+         asset.quantity = 0;
          asset.isActive = false;
       }
       await asset.save({ session });
@@ -291,12 +312,31 @@ export const bulkTransferCustody = async (req: AuthRequest, res: Response) => {
       }
 
       let targetCustodianId: mongoose.Types.ObjectId | undefined = undefined;
+      let targetEmp: any = null;
       if (toUserId && mongoose.Types.ObjectId.isValid(toUserId)) {
          targetCustodianId = new mongoose.Types.ObjectId(toUserId);
+         targetEmp = await Employee.findById(targetCustodianId).session(session);
       } else if (toUserName && toUserName !== 'المخزن') {
-         const emp = await Employee.findOne({ name: toUserName });
-         if (emp) {
-            targetCustodianId = emp._id as mongoose.Types.ObjectId;
+         targetEmp = await Employee.findOne({
+            name: toUserName,
+            $or: [
+               { projectId: toProjectId },
+               { projectIds: toProjectId }
+            ]
+         }).session(session);
+         if (!targetEmp) {
+            targetEmp = await Employee.findOne({ name: toUserName }).session(session);
+         }
+         if (targetEmp) {
+            targetCustodianId = targetEmp._id as mongoose.Types.ObjectId;
+         }
+      }
+
+      if (targetEmp && toProjectId) {
+         if (!targetEmp.projectIds) targetEmp.projectIds = [targetEmp.projectId];
+         if (!targetEmp.projectIds.some((pid: any) => pid.toString() === toProjectId.toString())) {
+            targetEmp.projectIds.push(toProjectId);
+            await targetEmp.save({ session });
          }
       }
 
