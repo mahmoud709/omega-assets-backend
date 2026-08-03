@@ -25,6 +25,22 @@ export const authenticate = async (req: AuthRequest, res: Response, next: NextFu
    }
 };
 
+export const optionalAuthenticate = async (req: AuthRequest, res: Response, next: NextFunction) => {
+   try {
+      const token = req.header('Authorization')?.replace('Bearer ', '');
+      if (token) {
+         const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string };
+         const user = await User.findById(decoded.id).select('-passwordHash');
+         if (user) {
+            req.user = user;
+         }
+      }
+      next();
+   } catch (error) {
+      next();
+   }
+};
+
 // Optional: role-based middleware
 export const authorize = (...roles: string[]) => {
    return (req: AuthRequest, res: Response, next: NextFunction) => {

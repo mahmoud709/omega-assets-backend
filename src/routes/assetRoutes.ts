@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, optionalAuthenticate, authorize } from '../middleware/auth';
 import {
    createAsset,
    getAssets,
@@ -19,7 +19,8 @@ const router = Router();
 router.post('/reorder', authenticate, authorize('admin', 'site_manager', 'viewer'), reorderAssets);
 router.put('/reorder', authenticate, authorize('admin', 'site_manager', 'viewer'), reorderAssets);
 
-// Public route for QR Code scans
+// Public / Read-only routes (QR code scans and matrix report)
+router.get('/', optionalAuthenticate, getAssets);
 router.get('/:id', getAssetById);
 
 router.use(authenticate);
@@ -28,8 +29,6 @@ router.post('/bulk', authorize('admin', 'site_manager', 'viewer'), bulkCreateAss
 
 router.post('/', authorize('admin', 'site_manager', 'viewer'), upload.single('image'), createAsset);
 
-router.get('/', getAssets);
-// router.get('/:id', getAssetById); (moved up)
 router.put('/:id', authorize('admin', 'site_manager', 'viewer'), updateAsset);
 router.delete('/:id', authorize('admin', 'site_manager', 'viewer'), deleteAsset);
 router.post('/:id/assign-custodian', authorize('admin', 'site_manager', 'viewer'), assignCustodian);

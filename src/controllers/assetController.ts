@@ -172,9 +172,9 @@ export const getAssets = async (req: AuthRequest, res: Response) => {
       }
 
       // Role-based filtering: strict project isolation
-      if (req.user!.role !== 'admin') {
-         if (req.user!.siteId) {
-            query.projectId = req.user!.siteId;
+      if (req.user && req.user.role !== 'admin') {
+         if (req.user.siteId) {
+            query.projectId = req.user.siteId;
          } else {
             // If user is not admin and has no assigned project, they see nothing
             return res.status(200).json({ message: 'Assets retrieved', data: [], pagination: { total: 0, pages: 0, page: 1, limit: 20 } });

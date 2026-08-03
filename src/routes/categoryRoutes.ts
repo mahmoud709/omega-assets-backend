@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authenticate, authorize } from '../middleware/auth';
+import { authenticate, optionalAuthenticate, authorize } from '../middleware/auth';
 import {
    createCategory,
    getCategories,
@@ -10,11 +10,13 @@ import {
 
 const router = Router();
 
+// Public / Read-only routes
+router.get('/', optionalAuthenticate, getCategories);
+router.get('/:id', optionalAuthenticate, getCategoryById);
+
 router.use(authenticate);
 
 router.post('/', authorize('admin', 'site_manager'), createCategory);
-router.get('/', getCategories);
-router.get('/:id', getCategoryById);
 router.put('/:id', authorize('admin', 'site_manager'), updateCategory);
 router.delete('/:id', authorize('admin'), deleteCategory);
 
