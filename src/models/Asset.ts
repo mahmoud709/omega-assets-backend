@@ -16,6 +16,7 @@ export interface IAsset extends Document {
    qrCodeImage?: string;    // path to image
    image?: string;          // Compressed image (base64 string)
    quantity: number;        // For bulk items like scaffolding
+   unit?: string;           // وحدة القياس: عدد، بستله، كرتونه، لفه، إلخ
    currentCustodianId?: mongoose.Types.ObjectId;
    custodianName?: string;
    custodyStartDate?: Date;
@@ -39,6 +40,7 @@ const AssetSchema = new Schema<IAsset>(
       categoryId: { type: Schema.Types.ObjectId, ref: 'Category', required: true },
       name: { type: String, required: true },
       quantity: { type: Number, default: 1 },
+      unit: { type: String, default: 'عدد' },
       serialNumber: { type: String },
       purchaseDate: { type: Date },
       purchaseCost: { type: Number },

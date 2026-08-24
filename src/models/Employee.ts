@@ -2,6 +2,7 @@ import mongoose, { Schema, Document } from 'mongoose';
 
 export interface IEmployee extends Document {
    name: string;
+   employeeCode?: string;
    projectId: mongoose.Types.ObjectId;
    projectIds?: mongoose.Types.ObjectId[];
    department?: string;
@@ -16,6 +17,7 @@ export interface IEmployee extends Document {
 const EmployeeSchema = new Schema<IEmployee>(
    {
       name: { type: String, required: true },
+      employeeCode: { type: String, trim: true },
       projectId: { type: Schema.Types.ObjectId, ref: 'Project', required: true },
       projectIds: [{ type: Schema.Types.ObjectId, ref: 'Project' }],
       department: { type: String },

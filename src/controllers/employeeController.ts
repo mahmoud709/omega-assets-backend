@@ -19,6 +19,7 @@ export const createEmployee = async (req: AuthRequest, res: Response) => {
 
          return {
             name: emp.name,
+            employeeCode: emp.employeeCode,
             department: emp.department,
             projectId: primaryProject,
             projectIds: uniqueProjectIds,
@@ -134,7 +135,7 @@ export const getEmployeeById = async (req: AuthRequest, res: Response) => {
 export const updateEmployee = async (req: AuthRequest, res: Response) => {
    try {
       const { id } = req.params;
-      const { name, department, projectId, projectIds, isOffice, members } = req.body;
+      const { name, employeeCode, department, projectId, projectIds, isOffice, members } = req.body;
       
       const oldEmployee = await Employee.findById(id);
       if (!oldEmployee) {
@@ -151,7 +152,8 @@ export const updateEmployee = async (req: AuthRequest, res: Response) => {
       const employee = await Employee.findByIdAndUpdate(
          id,
          { 
-            name, 
+            name,
+            employeeCode,
             department, 
             projectId: primaryProject, 
             projectIds: uniqueProjectIds,

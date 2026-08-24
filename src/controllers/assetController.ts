@@ -3,6 +3,7 @@ import Asset from '../models/Asset';
 import CustodyLog from '../models/CustodyLog';
 import { AuthRequest } from '../middleware/auth';
 import Employee from '../models/Employee';
+import Category from '../models/Category';
 import mongoose from 'mongoose';
 
 export const createAsset = async (req: AuthRequest, res: Response) => {
@@ -395,6 +396,7 @@ export const bulkCreateAssets = async (req: AuthRequest, res: Response) => {
             categoryId: assetData.categoryId,
             name: assetData.name,
             quantity: assetData.quantity !== undefined && assetData.quantity !== null && assetData.quantity !== '' ? Number(assetData.quantity) : 1,
+            unit: assetData.unit || assetData.specifications?.unit || 'عدد',
             serialNumber: assetData.serialNumber,
             purchaseDate: assetData.purchaseDate,
             purchaseCost: assetData.purchaseCost,
@@ -548,3 +550,364 @@ export const reorderAssets = async (req: AuthRequest, res: Response) => {
    } 
 };
 
+export const reconcilePreviewAssets = async (req: AuthRequest, res: Response) => {
+   try {
+      const { projectId, assets } = req.body;
+      if (!projectId) {
+         return res.status(400).json({ message: 'Project ID is required' });
+      }
+      if (!Array.isArray(assets) || assets.length === 0) {
+         return res.status(400).json({ message: 'No assets provided in file' });
+      }
+
+      // Role-based check
+      if (req.user!.role !== 'admin' && req.user!.siteId && req.user!.siteId.toString() !== projectId) {
+         return res.status(403).json({ message: 'Not authorized for this project' });
+      }
+
+      // Fetch all active assets for this project in MongoDB
+      const dbAssets = await Asset.find({ projectId, isActive: true })
+         .populate('categoryId', 'name')
+         .populate('currentCustodianId', 'name');
+
+      // Create lookup maps for fast & smart multi-stage matching
+      const systemIdMap = new Map<string, any>();
+      const serialMap = new Map<string, any>();
+      const nameToDbAssetsMap = new Map<string, any[]>();
+
+      const normalizeText = (str: string): string => {
+         if (!str) return '';
+         return str
+            .toLowerCase()
+            .replace(/[أإآ]/g, 'ا')
+            .replace(/ة/g, 'ه')
+            .replace(/ى/g, 'ي')
+            .replace(/[\s\-_]+/g, ' ')
+            .trim();
+      };
+
+      dbAssets.forEach((a: any) => {
+         if (a.systemId) systemIdMap.set(a.systemId.trim().toUpperCase(), a);
+         if (a.serialNumber && String(a.serialNumber).trim() !== '') {
+            serialMap.set(String(a.serialNumber).trim().toUpperCase(), a);
+         }
+         const normName = normalizeText(a.name);
+         if (normName) {
+            if (!nameToDbAssetsMap.has(normName)) {
+               nameToDbAssetsMap.set(normName, []);
+            }
+            nameToDbAssetsMap.get(normName)!.push(a);
+         }
+      });
+
+      const matchedDbAssetIds = new Set<string>();
+      const reconciledItems: any[] = [];
+
+      for (let idx = 0; idx < assets.length; idx++) {
+         const item = assets[idx];
+         let matchedAsset: any = null;
+
+         // 1. Match by System ID
+         if (item.systemId && typeof item.systemId === 'string' && item.systemId.trim() !== '') {
+            const candidate = systemIdMap.get(item.systemId.trim().toUpperCase());
+            if (candidate && !matchedDbAssetIds.has(candidate._id.toString())) {
+               matchedAsset = candidate;
+            }
+         }
+
+         // 2. Match by Serial Number
+         if (!matchedAsset && item.serialNumber && String(item.serialNumber).trim() !== '') {
+            const candidate = serialMap.get(String(item.serialNumber).trim().toUpperCase());
+            if (candidate && !matchedDbAssetIds.has(candidate._id.toString())) {
+               matchedAsset = candidate;
+            }
+         }
+
+         // 3. Match by Smart Normalized Name
+         if (!matchedAsset && item.name) {
+            const normName = normalizeText(item.name);
+            const dbCandidates = nameToDbAssetsMap.get(normName) || [];
+            const availableCandidates = dbCandidates.filter(a => !matchedDbAssetIds.has(a._id.toString()));
+
+            if (availableCandidates.length > 0) {
+               // 3a. Prefer candidate with matching custodian
+               const itemCustNorm = normalizeText(item.custodianName);
+               if (itemCustNorm) {
+                  matchedAsset = availableCandidates.find(a => normalizeText(a.custodianName) === itemCustNorm);
+               }
+               // 3b. Fall back to first available candidate with matching name
+               if (!matchedAsset) {
+                  matchedAsset = availableCandidates[0];
+               }
+            }
+         }
+
+         if (matchedAsset) {
+            matchedDbAssetIds.add(matchedAsset._id.toString());
+            const changes: any[] = [];
+
+            // Compare fields accurately without false positives
+            const newName = (item.name || '').trim();
+            const oldName = (matchedAsset.name || '').trim();
+            if (newName && normalizeText(newName) !== normalizeText(oldName)) {
+               changes.push({ field: 'name', label: 'اسم الأصل', oldValue: oldName, newValue: newName });
+            }
+
+            const newQty = Number(item.quantity !== undefined && item.quantity !== null && item.quantity !== '' ? item.quantity : 1);
+            const oldQty = Number(matchedAsset.quantity || 1);
+            if (newQty !== oldQty) {
+               changes.push({ field: 'quantity', label: 'الكمية', oldValue: oldQty, newValue: newQty });
+            }
+
+            const newCust = (item.custodianName || '').trim();
+            const oldCust = (matchedAsset.custodianName || '').trim();
+            if (normalizeText(newCust) !== normalizeText(oldCust)) {
+               changes.push({ field: 'custodianName', label: 'اسم العهدة', oldValue: oldCust || 'لا يوجد', newValue: newCust || 'لا يوجد' });
+            }
+
+            const newCond = (item.condition || '').trim();
+            const oldCond = (matchedAsset.condition || 'good').trim();
+            if (newCond && newCond !== oldCond) {
+               changes.push({ field: 'condition', label: 'الحالة', oldValue: oldCond, newValue: newCond });
+            }
+
+            const newSerial = (item.serialNumber || '').trim();
+            const oldSerial = (matchedAsset.serialNumber || '').trim();
+            if (newSerial && newSerial !== oldSerial) {
+               changes.push({ field: 'serialNumber', label: 'الرقم التسلسلي', oldValue: oldSerial || 'لا يوجد', newValue: newSerial });
+            }
+
+            const newNotes = (item.notes || '').trim();
+            const oldNotes = (matchedAsset.notes || '').trim();
+            if (newNotes && normalizeText(newNotes) !== normalizeText(oldNotes)) {
+               changes.push({ field: 'notes', label: 'الملاحظات', oldValue: oldNotes || 'لا يوجد', newValue: newNotes });
+            }
+
+            const newVendor = (item.vendor || '').trim();
+            const oldVendor = (matchedAsset.vendor || '').trim();
+            if (newVendor && normalizeText(newVendor) !== normalizeText(oldVendor)) {
+               changes.push({ field: 'vendor', label: 'المورّد', oldValue: oldVendor || 'لا يوجد', newValue: newVendor });
+            }
+
+            const status = changes.length > 0 ? 'modified' : 'unchanged';
+            reconciledItems.push({
+               tempId: `row-${idx}`,
+               status,
+               matchedAssetId: matchedAsset._id.toString(),
+               systemId: matchedAsset.systemId,
+               fileData: item,
+               dbData: {
+                  _id: matchedAsset._id,
+                  name: matchedAsset.name,
+                  quantity: matchedAsset.quantity,
+                  custodianName: matchedAsset.custodianName,
+                  condition: matchedAsset.condition,
+                  serialNumber: matchedAsset.serialNumber,
+                  notes: matchedAsset.notes,
+                  vendor: matchedAsset.vendor,
+                  categoryName: matchedAsset.categoryId?.name || '',
+               },
+               changes,
+            });
+         } else {
+            // New asset
+            reconciledItems.push({
+               tempId: `row-${idx}`,
+               status: 'new',
+               fileData: item,
+               changes: [],
+            });
+         }
+      }
+
+      // Collect assets in DB that were missing from file
+      const missingAssets = dbAssets
+         .filter((a: any) => !matchedDbAssetIds.has(a._id.toString()))
+         .map((a: any) => ({
+            assetId: a._id.toString(),
+            systemId: a.systemId,
+            name: a.name,
+            custodianName: a.custodianName,
+            quantity: a.quantity || 1,
+            condition: a.condition,
+            categoryName: a.categoryId?.name || '',
+         }));
+
+      const summary = {
+         totalInFile: assets.length,
+         newCount: reconciledItems.filter(i => i.status === 'new').length,
+         modifiedCount: reconciledItems.filter(i => i.status === 'modified').length,
+         unchangedCount: reconciledItems.filter(i => i.status === 'unchanged').length,
+         missingCount: missingAssets.length,
+      };
+
+      res.status(200).json({
+         message: 'تم تحليل ومطابقة الملف بنجاح',
+         summary,
+         items: reconciledItems,
+         missingAssets,
+      });
+   } catch (error) {
+      console.error('Reconcile preview error:', error);
+      res.status(500).json({ message: 'Server error during reconciliation preview', error });
+   }
+};
+
+export const reconcileApplyAssets = async (req: AuthRequest, res: Response) => {
+   try {
+      const { projectId, selectedCategoryId, newItems = [], modifiedItems = [], deactivateAssetIds = [] } = req.body;
+      if (!projectId) {
+         return res.status(400).json({ message: 'Project ID is required' });
+      }
+
+      if (req.user!.role !== 'admin' && req.user!.siteId && req.user!.siteId.toString() !== projectId) {
+         return res.status(403).json({ message: 'Not authorized for this project' });
+      }
+
+      let addedCount = 0;
+      let updatedCount = 0;
+      let deactivatedCount = 0;
+
+      // 1. Insert new items
+      if (Array.isArray(newItems) && newItems.length > 0) {
+         let count = await Asset.countDocuments();
+         const currentYear = new Date().getFullYear();
+         const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+
+         let fallbackCatId: any = undefined;
+         if (selectedCategoryId && mongoose.Types.ObjectId.isValid(selectedCategoryId)) {
+            fallbackCatId = selectedCategoryId;
+         }
+         if (!fallbackCatId) {
+            let defaultCat = await Category.findOne({ projectId });
+            if (!defaultCat) {
+               defaultCat = await Category.create({
+                  name: 'أصول عامة',
+                  projectId,
+                  level: 0,
+                  path: ',أصول عامة,'
+               });
+            }
+            fallbackCatId = defaultCat._id;
+         }
+
+         const employeeNames = newItems
+            .map((a: any) => a.custodianName)
+            .filter((name: any): name is string => typeof name === 'string' && name.trim() !== '');
+         const matchedEmployees = await Employee.find({ name: { $in: employeeNames }, isActive: true });
+         const employeeMap = new Map<string, string>();
+         matchedEmployees.forEach(emp => {
+            employeeMap.set(emp.name.trim().toLowerCase(), emp._id.toString());
+         });
+
+         const createdAssets = [];
+         for (const item of newItems) {
+            let systemId = item.systemId && typeof item.systemId === 'string' && item.systemId.trim() !== '' ? item.systemId.trim() : null;
+            if (systemId) {
+               const exists = await Asset.exists({ systemId });
+               if (exists) systemId = null;
+            }
+            if (!systemId) {
+               count++;
+               systemId = `OMEGA-${currentYear}-${String(count).padStart(4, '0')}`;
+            }
+
+            const qrData = `${frontendUrl}/assets/${systemId}`;
+
+            let currentCustodianId: string | undefined = undefined;
+            if (item.custodianName) {
+               currentCustodianId = employeeMap.get(item.custodianName.trim().toLowerCase());
+            }
+
+            let validCatId: any = undefined;
+            if (item.categoryId && mongoose.Types.ObjectId.isValid(item.categoryId)) {
+               validCatId = item.categoryId;
+            } else {
+               validCatId = fallbackCatId;
+            }
+
+            createdAssets.push(new Asset({
+               systemId,
+               projectId,
+               categoryId: validCatId,
+               name: item.name,
+               quantity: Number(item.quantity || 1),
+               serialNumber: item.serialNumber,
+               purchaseDate: item.purchaseDate,
+               purchaseCost: item.purchaseCost,
+               vendor: item.vendor,
+               condition: item.condition || 'good',
+               notes: item.notes,
+               specifications: item.specifications || {},
+               qrCodeData: qrData,
+               custodianName: item.custodianName,
+               currentCustodianId: currentCustodianId || undefined,
+               custodyStartDate: currentCustodianId ? new Date() : undefined,
+               isActive: true,
+               createdBy: req.user!._id,
+            }));
+         }
+
+         if (createdAssets.length > 0) {
+            await Asset.insertMany(createdAssets);
+            addedCount = createdAssets.length;
+         }
+      }
+
+      // 2. Update modified items
+      if (Array.isArray(modifiedItems) && modifiedItems.length > 0) {
+         const custNamesToResolve = modifiedItems
+            .map((mod: any) => mod.updates?.custodianName)
+            .filter((name: any): name is string => typeof name === 'string' && name.trim() !== '');
+
+         let empMap = new Map<string, string>();
+         if (custNamesToResolve.length > 0) {
+            const emps = await Employee.find({ name: { $in: custNamesToResolve }, isActive: true });
+            emps.forEach(emp => empMap.set(emp.name.trim().toLowerCase(), emp._id.toString()));
+         }
+
+         for (const mod of modifiedItems) {
+            if (!mod.assetId || !mod.updates) continue;
+            const updateFields: any = { ...mod.updates };
+
+            if (updateFields.custodianName) {
+               const empId = empMap.get(updateFields.custodianName.trim().toLowerCase());
+               if (empId) {
+                  updateFields.currentCustodianId = empId;
+               }
+            }
+
+            if (updateFields.categoryId && !mongoose.Types.ObjectId.isValid(updateFields.categoryId)) {
+               delete updateFields.categoryId;
+            }
+
+            await Asset.updateOne({ _id: mod.assetId, projectId }, { $set: updateFields });
+            updatedCount++;
+         }
+      }
+
+      // 3. Deactivate missing assets if requested
+      if (Array.isArray(deactivateAssetIds) && deactivateAssetIds.length > 0) {
+         const validMissingIds = deactivateAssetIds.filter((id: string) => mongoose.Types.ObjectId.isValid(id));
+         if (validMissingIds.length > 0) {
+            const result = await Asset.updateMany(
+               { _id: { $in: validMissingIds }, projectId },
+               { $set: { isActive: false } }
+            );
+            deactivatedCount = result.modifiedCount;
+         }
+      }
+
+      res.status(200).json({
+         message: 'تم تطبيق المزامنة والتحديثات بنجاح',
+         summary: {
+            addedCount,
+            updatedCount,
+            deactivatedCount,
+         },
+      });
+   } catch (error: any) {
+      console.error('Reconcile apply error:', error?.message || error, error?.stack);
+      res.status(500).json({ message: error?.message || 'Server error during reconciliation apply', detail: String(error) });
+   }
+};

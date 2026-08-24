@@ -12,6 +12,7 @@ import maintenanceRoutes from './routes/maintenanceRoutes';
 import reportRoutes from './routes/reportRoutes';
 import userRoutes from './routes/userRoutes';
 import employeeRoutes from './routes/employeeRoutes';
+import companySettingsRoutes from './routes/companySettingsRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFound';
 import { authenticate, authorize } from './middleware/auth';
@@ -52,6 +53,7 @@ app.use('/api/maintenance', maintenanceRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/employees', employeeRoutes);
+app.use('/api/company-settings', companySettingsRoutes);
 
 // Health checks
 app.get('/', (req, res) => { res.status(200).send('OK'); });
