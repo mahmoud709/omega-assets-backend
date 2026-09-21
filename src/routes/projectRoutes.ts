@@ -4,6 +4,7 @@ import {
    createProject,
    getProjects,
    getProjectById,
+   getProjectNames,
    updateProject,
    deleteProject,
 } from '../controllers/projectController';
@@ -12,6 +13,7 @@ const router = Router();
 
 // Public / Read-only routes
 router.get('/', optionalAuthenticate, getProjects);
+router.get('/names', authenticate, getProjectNames);
 router.get('/:id', optionalAuthenticate, getProjectById);
 
 router.use(authenticate);

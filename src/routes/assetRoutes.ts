@@ -13,27 +13,29 @@ import {
    reconcilePreviewAssets,
    reconcileApplyAssets,
    bulkDeleteAssets,
+   bulkUpdateCategoryAssets,
 } from '../controllers/assetController';
 import { upload } from '../middleware/upload';
 
 const router = Router();
 
 // Reorder endpoint (declared first to guarantee exact route matching)
-router.post('/reorder', authenticate, authorize('admin', 'site_manager', 'viewer'), reorderAssets);
-router.put('/reorder', authenticate, authorize('admin', 'site_manager', 'viewer'), reorderAssets);
+router.post('/reorder', authenticate, authorize('admin', 'site_manager', 'storekeeper', 'viewer'), reorderAssets);
+router.put('/reorder', authenticate, authorize('admin', 'site_manager', 'storekeeper', 'viewer'), reorderAssets);
 
 // Reconcile / Diff Sync endpoints
-router.post('/reconcile-preview', authenticate, authorize('admin', 'site_manager', 'viewer'), reconcilePreviewAssets);
-router.post('/reconcile-apply', authenticate, authorize('admin', 'site_manager', 'viewer'), reconcileApplyAssets);
+router.post('/reconcile-preview', authenticate, authorize('admin', 'site_manager', 'storekeeper', 'viewer'), reconcilePreviewAssets);
+router.post('/reconcile-apply', authenticate, authorize('admin', 'site_manager', 'storekeeper', 'viewer'), reconcileApplyAssets);
 
 // Public / Read-only routes (QR code scans and matrix report)
 router.get('/', optionalAuthenticate, getAssets);
 router.get('/:id', getAssetById);
 
 router.use(authenticate);
-router.get('/duplicates', authorize('admin', 'site_manager', 'viewer'), findDuplicateAssets);
-router.post('/bulk', authorize('admin', 'site_manager', 'viewer'), bulkCreateAssets);
-router.post('/bulk-delete', authorize('admin', 'site_manager'), bulkDeleteAssets);
+router.get('/duplicates', authorize('admin', 'site_manager', 'storekeeper', 'viewer'), findDuplicateAssets);
+router.post('/bulk', authorize('admin', 'site_manager', 'storekeeper', 'viewer'), bulkCreateAssets);
+router.post('/bulk-delete', authorize('admin', 'site_manager', 'storekeeper'), bulkDeleteAssets);
+router.post('/bulk-update-category', authorize('admin', 'site_manager', 'storekeeper'), bulkUpdateCategoryAssets);
 
 router.post('/', authorize('admin', 'site_manager', 'viewer'), upload.single('image'), createAsset);
 

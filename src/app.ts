@@ -13,6 +13,7 @@ import reportRoutes from './routes/reportRoutes';
 import userRoutes from './routes/userRoutes';
 import employeeRoutes from './routes/employeeRoutes';
 import companySettingsRoutes from './routes/companySettingsRoutes';
+import warehouseTransactionRoutes from './routes/warehouseTransactionRoutes';
 import { errorHandler } from './middleware/errorHandler';
 import { notFoundHandler } from './middleware/notFound';
 import { authenticate, authorize } from './middleware/auth';
@@ -54,6 +55,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/company-settings', companySettingsRoutes);
+app.use('/api/transactions', warehouseTransactionRoutes);
 
 // Health checks
 app.get('/', (req, res) => { res.status(200).send('OK'); });

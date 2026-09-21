@@ -454,6 +454,40 @@ export const bulkDeleteAssets = async (req: AuthRequest, res: Response) => {
    }
 };
 
+export const bulkUpdateCategoryAssets = async (req: AuthRequest, res: Response) => {
+   try {
+      const { ids, categoryId } = req.body;
+      if (!Array.isArray(ids) || ids.length === 0) {
+         return res.status(400).json({ message: 'لم يتم تحديد عناصر لتعديل الفئة' });
+      }
+      if (!categoryId || !mongoose.Types.ObjectId.isValid(categoryId)) {
+         return res.status(400).json({ message: 'الفئة المعينة غير صالحة' });
+      }
+
+      const targetCategory = await Category.findById(categoryId);
+      if (!targetCategory) {
+         return res.status(404).json({ message: 'الفئة غير موجودة' });
+      }
+
+      const query: any = { _id: { $in: ids } };
+
+      if (req.user!.role !== 'admin' && req.user!.siteId) {
+         query.projectId = req.user!.siteId;
+      }
+
+      const result = await Asset.updateMany(query, { $set: { categoryId: targetCategory._id } });
+
+      res.status(200).json({
+         message: `تم تغيير فئة ${result.modifiedCount} عنصر بنجاح إلى "${targetCategory.name}"`,
+         updatedCount: result.modifiedCount,
+         categoryName: targetCategory.name,
+      });
+   } catch (error) {
+      console.error('Bulk category update error:', error);
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
 export const findDuplicateAssets = async (req: AuthRequest, res: Response) => {
    try {
       const matchStage: any = { isActive: true };

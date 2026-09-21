@@ -47,6 +47,18 @@ export const createProject = async (req: AuthRequest, res: Response) => {
    }
 };
 
+export const getProjectNames = async (req: AuthRequest, res: Response) => {
+   try {
+      const projects = await Project.find({ isActive: true })
+         .select('_id name location')
+         .sort({ name: 1 });
+      res.status(200).json({ data: projects });
+   } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+
 export const getProjects = async (req: AuthRequest, res: Response) => {
    try {
       const { isActive = true, location, page = 1, limit = 20 } = req.query;
