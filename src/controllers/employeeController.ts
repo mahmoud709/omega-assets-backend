@@ -39,10 +39,11 @@ export const getEmployees = async (req: AuthRequest, res: Response) => {
    try {
       const { projectId, search, page = 1, limit = 20 } = req.query;
       const query: any = { isActive: true };
+      const requestedProjectId = typeof projectId === 'string' ? projectId : undefined;
       
       const filterProjectId = req.user!.role !== 'admin' && req.user!.siteId 
          ? req.user!.siteId 
-         : projectId;
+         : requestedProjectId;
 
       if (filterProjectId) {
          const custodianIdsInProject = await Asset.distinct('currentCustodianId', { 
@@ -299,4 +300,3 @@ export const deleteEmployee = async (req: AuthRequest, res: Response) => {
       res.status(500).json({ message: 'Server error', error });
    }
 };
-
