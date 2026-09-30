@@ -273,32 +273,16 @@ export const createTransferOrder = async (req: AuthRequest, res: Response) => {
          const qtyToTransfer = Number(item.quantity) || 1;
 
          if (asset.quantity === qtyToTransfer) {
-            asset.projectId = targetProjectId;
+            asset.quantity = 0;
+            asset.isActive = false; // Mark inactive since it's fully transferred (temporarily or permanently)
             asset.custodianName = undefined;
             asset.currentCustodianId = undefined;
             await asset.save();
          } else if ((asset.quantity || 1) > qtyToTransfer) {
             asset.quantity = asset.quantity - qtyToTransfer;
             await asset.save();
-
-            const countAll = await Asset.countDocuments();
-            const systemId = `OMEGA-${year}-${String(countAll + 1).padStart(4, '0')}`;
-            const qrData = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/assets/${systemId}`;
-
-            const newAsset = new Asset({
-               systemId,
-               projectId: targetProjectId,
-               categoryId: asset.categoryId,
-               name: asset.name,
-               quantity: qtyToTransfer,
-               unit: asset.unit || 'عدد',
-               condition: asset.condition,
-               notes: `منقول من مشروع سابق بموجب إذن نقل ${transactionNumber}`,
-               qrCodeData: qrData,
-               isActive: true,
-               createdBy: req.user!._id,
-            });
-            await newAsset.save();
+         } else {
+            continue; // Not enough quantity
          }
 
          processedItems.push({
@@ -326,8 +310,8 @@ export const createTransferOrder = async (req: AuthRequest, res: Response) => {
          projectId,
          targetProjectId,
          items: processedItems,
-         status: 'completed',
-         transferStatus: 'received',
+         status: 'pending',
+         transferStatus: 'pending_approval',
          notes,
          createdBy: req.user!._id,
          createdByName: req.user!.fullName,
@@ -350,12 +334,24 @@ export const getTransactions = async (req: AuthRequest, res: Response) => {
       const { projectId, type, status, page = 1, limit = 20 } = req.query;
       const query: any = {};
 
-      if (projectId) query.projectId = projectId;
+      if (projectId) {
+         query.$or = [{ projectId }, { targetProjectId: projectId }];
+      }
       if (type) query.type = type;
       if (status) query.status = status;
 
+      // Role-based filtering
       if (req.user && req.user.role !== 'admin' && req.user.siteId) {
-         query.$or = [{ projectId: req.user.siteId }, { targetProjectId: req.user.siteId }];
+         const siteId = req.user.siteId;
+         if (query.$or) {
+            query.$and = [
+               { $or: query.$or },
+               { $or: [{ projectId: siteId }, { targetProjectId: siteId }] }
+            ];
+            delete query.$or;
+         } else {
+            query.$or = [{ projectId: siteId }, { targetProjectId: siteId }];
+         }
       }
 
       const pageNum = Math.max(1, parseInt(page as string) || 1);
@@ -404,6 +400,104 @@ export const getTransactionById = async (req: AuthRequest, res: Response) => {
 
       res.status(200).json({ message: 'Transaction retrieved', transaction });
    } catch (error) {
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+export const approveTransfer = async (req: AuthRequest, res: Response) => {
+   try {
+      const { id } = req.params;
+      const transaction = await WarehouseTransaction.findById(id);
+
+      if (!transaction || transaction.type !== 'project_transfer' || transaction.transferStatus !== 'pending_approval') {
+         return res.status(404).json({ message: 'طلب نقل غير صالح أو تم معالجته مسبقاً' });
+      }
+
+      // Ensure user has permission (must be target project storekeeper or admin)
+      if (req.user!.role !== 'admin' && req.user!.siteId?.toString() !== transaction.targetProjectId?.toString()) {
+         return res.status(403).json({ message: 'غير مصرح لك بالموافقة على هذا النقل' });
+      }
+
+      const year = new Date().getFullYear();
+      let countAll = await Asset.countDocuments();
+
+      // Create new assets in the target project
+      for (const item of transaction.items) {
+         countAll++;
+         const systemId = `OMEGA-${year}-${String(countAll).padStart(4, '0')}`;
+         const qrData = `${process.env.FRONTEND_URL || 'http://localhost:3000'}/assets/${systemId}`;
+
+         const newAsset = new Asset({
+            systemId,
+            projectId: transaction.targetProjectId,
+            categoryId: item.categoryId,
+            name: item.name,
+            quantity: item.quantity,
+            unit: item.unit || 'عدد',
+            condition: item.condition || 'good',
+            notes: `مستلم من مشروع المصدر بموجب إذن نقل ${transaction.transactionNumber}`,
+            qrCodeData: qrData,
+            isActive: true,
+            createdBy: req.user!._id,
+         });
+         await newAsset.save();
+
+         // Update CustodyLog
+         if (item.assetId) {
+            const log = new CustodyLog({
+               assetId: newAsset._id,
+               fromProjectId: transaction.projectId,
+               toProjectId: transaction.targetProjectId,
+               notes: `تأكيد استلام أمر نقل رقم ${transaction.transactionNumber}`,
+            });
+            await log.save();
+         }
+      }
+
+      transaction.status = 'completed';
+      transaction.transferStatus = 'received';
+      transaction.receivedBy = req.user!._id;
+      transaction.receivedByName = req.user!.fullName;
+      await transaction.save();
+
+      res.status(200).json({ message: 'تم استلام الأصول وإضافتها لعهدتك بنجاح', transaction });
+   } catch (error) {
+      console.error('Approve transfer error:', error);
+      res.status(500).json({ message: 'Server error', error });
+   }
+};
+
+export const rejectTransfer = async (req: AuthRequest, res: Response) => {
+   try {
+      const { id } = req.params;
+      const transaction = await WarehouseTransaction.findById(id);
+
+      if (!transaction || transaction.type !== 'project_transfer' || transaction.transferStatus !== 'pending_approval') {
+         return res.status(404).json({ message: 'طلب نقل غير صالح أو تم معالجته مسبقاً' });
+      }
+
+      if (req.user!.role !== 'admin' && req.user!.siteId?.toString() !== transaction.targetProjectId?.toString()) {
+         return res.status(403).json({ message: 'غير مصرح لك برفض هذا النقل' });
+      }
+
+      // Restore assets to the source project
+      for (const item of transaction.items) {
+         if (!item.assetId) continue;
+         const sourceAsset = await Asset.findById(item.assetId);
+         if (sourceAsset) {
+            sourceAsset.quantity = (sourceAsset.quantity || 0) + item.quantity;
+            sourceAsset.isActive = true; // Ensure it's active if it was zeroed
+            await sourceAsset.save();
+         }
+      }
+
+      transaction.status = 'cancelled';
+      transaction.transferStatus = 'rejected';
+      await transaction.save();
+
+      res.status(200).json({ message: 'تم رفض إذن النقل وإعادة الأصول لمشروع المصدر', transaction });
+   } catch (error) {
+      console.error('Reject transfer error:', error);
       res.status(500).json({ message: 'Server error', error });
    }
 };
